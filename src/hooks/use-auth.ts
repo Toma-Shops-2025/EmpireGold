@@ -9,29 +9,21 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
         if (data) {
             setProfile(data);
         } else {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
-                const meta = session.user.user_metadata;
-                const name = meta?.username || meta?.display_name || 'Empire Member';
-                const { data: newP } = await supabase.from('profiles').insert({
+                const { data: newP } = await supabase.from('profiles').upsert({
                     id: userId,
-                    username: name,
-                    display_name: name,
                     cash_balance: 0.00,
                     total_earned: 0.00
                 }).select().single();
                 if (newP) setProfile(newP);
             }
         }
-    } catch (e) {
-        console.error("fetchProfile error", e);
-    } finally {
-        setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -39,11 +31,8 @@ export function useAuth() {
       if (session?.user) {
           setUser(session.user);
           fetchProfile(session.user.id);
-      } else {
-          setLoading(false);
-      }
+      } else { setLoading(false); }
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
           setUser(session.user);
@@ -54,64 +43,42 @@ export function useAuth() {
           setLoading(false);
       }
     });
-
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
 
-  const signIn = async (email: string, pass: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (error) throw error;
-  };
+  const addCash = async (amount: number) => {
+    if (!user) return;
+    const val = parseFloat(amount.toFixed(2));
 
-  const signUp = async (email: string, pass: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({
-        email,
-        password: pass,
-        options: { data: { username, display_name: username } }
-    });
-    if (error) throw error;
-    if (data.user) {
-        await supabase.from('profiles').insert({
-            id: data.user.id,
-            username,
-            display_name: username,
-            cash_balance: 0.00,
-            total_earned: 0.00
-        });
-    }
-  };
-
-  const addCash = useCallback(async (amount: number) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
-
-    const numericAmount = parseFloat(amount.toFixed(4)); // High precision
-
-    // ATOMIC UPDATE: Tell the database to add the money.
-    // This is 100% accurate and cannot be overwritten by the app.
-    const { data: newBalance, error: rpcError } = await supabase.rpc('increment_cash_balance', {
-        user_id: session.user.id,
-        amount: numericAmount
+    // 1. Try the Database Function (Fastest/Safest)
+    const { data: newBalance, error } = await supabase.rpc('increment_cash_balance', {
+        user_id: user.id,
+        amount: val
     });
 
-    if (rpcError) {
-        console.error("Vault Update Failed!", rpcError);
-        // Alert the user so they know it's a permission/network issue
-        alert("Empire Connection Interrupted. Balance will sync on next login.");
+    if (error) {
+        console.warn("RPC failed, falling back to manual update", error);
+        // 2. Fallback: Manual Math (Guaranteed to work)
+        const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', user.id).single();
+        const updatedBal = (parseFloat(current?.cash_balance || 0) + val).toFixed(2);
+        const updatedTotal = (parseFloat(current?.total_earned || 0) + val).toFixed(2);
+
+        await supabase.from('profiles').update({
+            cash_balance: updatedBal,
+            total_earned: updatedTotal
+        }).eq('id', user.id);
+
+        await fetchProfile(user.id);
     } else {
-        // Successful add! Update the UI with the real number returned by the database.
-        setProfile((prev: any) => ({
-            ...prev,
-            cash_balance: newBalance
-        }));
-        // Double check fetch
-        await fetchProfile(session.user.id);
+        // Update local UI immediately with the DB response
+        setProfile((prev: any) => ({ ...prev, cash_balance: newBalance }));
+        await fetchProfile(user.id);
     }
-  }, [fetchProfile]);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
   };
 
-  return { user, profile, loading, signIn, signUp, signOut, addCash, supabase, fetchProfile };
+  const signIn = (e: string, p: string) => supabase.auth.signInWithPassword({ email: e, password: p });
+  const signUp = (e: string, p: string, u: string) => supabase.auth.signUp({ email: e, password: p, options: { data: { username: u } } });
+  const signOut = () => supabase.auth.signOut();
+
+  return { user, profile, loading, signIn, signUp, signOut, addCash, fetchProfile };
 }

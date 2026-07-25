@@ -38,7 +38,7 @@ function AppBackground() {
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
         <img
             src="/bg-gold.png"
-            className="w-full h-full object-cover opacity-50 scale-105"
+            className="w-full h-full object-cover opacity-60 scale-105"
             alt=""
         />
         <div className="absolute inset-0 bg-black/40" />
@@ -53,7 +53,7 @@ export default function EmpireGoldHub() {
     const [isAdLoading, setIsAdLoading] = useState(false)
     const [gameStartTime, setGameStartTime] = useState<number | null>(null)
     const [history, setHistory] = useState<Record<string, number>>(() => {
-        const saved = localStorage.getItem('empire_gold_history_v4');
+        const saved = localStorage.getItem('empire_gold_history_v5');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
     });
 
@@ -62,11 +62,12 @@ export default function EmpireGoldHub() {
     const [username, setUsername] = useState('')
     const [isLogin, setIsLogin] = useState(true)
 
-    // Handle App Resume (Reward logic)
+    // Handle App Resume (Reward logic for mobile)
     useEffect(() => {
         let listener: any = null;
         const setupListener = async () => {
-            if (!(window as any).Capacitor?.isNativePlatform()) return;
+            const isNative = (window as any).Capacitor?.isNativePlatform();
+            if (!isNative) return;
             listener = await App.addListener('appStateChange', async ({ isActive }) => {
                 if (isActive && gameStartTime) {
                     const elapsed = Math.max(1, Math.floor((Date.now() - gameStartTime) / 60000));
@@ -74,10 +75,6 @@ export default function EmpireGoldHub() {
                     setGameStartTime(null);
                     await auth.addCash(reward);
                     toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsed} min`, icon: '👑' });
-                    try {
-                        await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
-                        await AdMob.showInterstitial();
-                    } catch(e) {}
                 }
             });
         };
@@ -88,19 +85,17 @@ export default function EmpireGoldHub() {
     const openPortal = async (portalId: string, url: string) => {
         const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
-        localStorage.setItem('empire_gold_history_v4', JSON.stringify(newHistory));
+        localStorage.setItem('empire_gold_history_v5', JSON.stringify(newHistory));
 
-        if ((window as any).Capacitor?.isNativePlatform()) {
-            try {
-                await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
-                await AdMob.showInterstitialAd();
-            } catch(e) {}
+        const isNative = (window as any).Capacitor?.isNativePlatform();
+        if (isNative) {
             setGameStartTime(Date.now());
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
             window.open(url, '_blank');
-            setGameStartTime(Date.now());
-            toast.info("Arcade opened. Wealth accumulating...");
+            // Web test: give $0.10 immediately
+            await auth.addCash(0.10);
+            toast.success("Arcade opened! +$0.10 awarded for testing.");
         }
     }
 
@@ -113,22 +108,12 @@ export default function EmpireGoldHub() {
                 await AdMob.showRewardVideoAd();
                 await auth.addCash(0.10);
                 toast.success("Reward Earned! +$0.10");
-            } catch(e) {
-                toast.error("Ad not available yet.");
-            }
+            } catch(e) { toast.error("Ad not available yet."); }
         } else {
             await auth.addCash(0.10);
             toast.success("Simulated Reward: +$0.10");
         }
         setIsAdLoading(false);
-    }
-
-    const handleAuth = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            if (isLogin) await auth.signIn(email, password);
-            else await auth.signUp(email, password, username);
-        } catch (err: any) { toast.error(err.message); }
     }
 
     if (auth.loading) return (
@@ -146,7 +131,7 @@ export default function EmpireGoldHub() {
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
                     Empire<br/><span className="text-yellow-400 font-serif">Gold</span>
                 </h1>
-                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
+                <form onSubmit={(e) => { e.preventDefault(); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
                     {!isLogin && (
                         <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
@@ -193,27 +178,22 @@ export default function EmpireGoldHub() {
                     </div>
                 </div>
 
-                {/* PROGRESS BAR */}
+                {/* LABELED PROGRESS BAR */}
                 <div className="space-y-4 relative z-10 px-1">
                     <div className="flex justify-between text-[11px] font-black uppercase italic tracking-wider">
                         <span className="opacity-40">Progress</span>
                         <span className="text-yellow-400">{goalPct.toFixed(0)}% to $50.00</span>
                     </div>
-                    <div className="relative pt-4">
-                        <div className="h-4 w-full bg-black/40 rounded-full overflow-hidden p-1 border border-white/5">
+                    <div className="relative pt-4 pb-2">
+                        <div className="h-4 w-full bg-black/40 rounded-full overflow-hidden p-1 border border-white/5 shadow-inner">
                             <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.4)] transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
                         </div>
-                        <div className="absolute -top-1 inset-x-0 flex justify-between px-2 text-[8px] font-black text-white/40 uppercase tracking-tighter">
+                        {/* LABELS */}
+                        <div className="absolute top-0 inset-x-0 flex justify-between px-2 text-[8px] font-black text-white/40 uppercase">
                             <span>$0</span>
-                            <div className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-white/20 mb-1" /><span>$5</span>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-white/20 mb-1" /><span>$10</span>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-white/20 mb-1" /><span>$25</span>
-                            </div>
+                            <div className="flex flex-col items-center ml-[10%]" style={{ left: '10%' }}><div className="h-1.5 w-px bg-white/20 mb-0.5" />$5</div>
+                            <div className="flex flex-col items-center ml-[20%]" style={{ left: '20%' }}><div className="h-1.5 w-px bg-white/20 mb-0.5" />$10</div>
+                            <div className="flex flex-col items-center ml-[50%]" style={{ left: '50%' }}><div className="h-1.5 w-px bg-white/20 mb-0.5" />$25</div>
                             <span>$50</span>
                         </div>
                     </div>
@@ -278,7 +258,7 @@ export default function EmpireGoldHub() {
                                             <div className="flex flex-col">
                                                 <span className="font-black text-white uppercase text-xs tracking-tight">{p.name}</span>
                                                 <span className="text-[10px] text-yellow-400/80 font-bold mt-1 uppercase tracking-wider">
-                                                    {time ? `Last active: ${new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Play to track your last game"}
+                                                    {time ? `Last active: ${new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Your last game from this portal will appear here"}
                                                 </span>
                                             </div>
                                         </div>
@@ -301,7 +281,7 @@ export default function EmpireGoldHub() {
                         </div>
 
                         <div className="mt-12 flex flex-col items-center gap-4 text-center pb-20 relative z-10 text-white font-black uppercase">
-                            <span className="text-xl italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || auth.user?.email || 'Empire Member'}</span>
+                            <span className="text-xl italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || auth.user?.email.split('@')[0] || 'Empire Member'}</span>
                             <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
                         </div>
                     </div>
@@ -311,6 +291,7 @@ export default function EmpireGoldHub() {
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-4 z-[5000]">
                 <NavButton icon={TrendingUp} label="Dashboard" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
                 <NavButton icon={Layers} label="Portals" active={activeTab === 'portals'} onClick={() => setActiveTab('portals')} />
+                <NavButton icon={Gamepad2} label="My Games" active={activeTab === 'mygames'} onClick={() => setActiveTab('mygames')} />
                 <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => setActiveTab('payouts')} />
             </nav>
         </div>
@@ -332,7 +313,7 @@ function DashButton({ icon: Icon, label, color, onClick }: any) {
 function RewardCard({ title, cost, balance, icon: Icon, color }: any) {
     const isUnlocked = balance >= cost;
     return (
-        <div className={cn("glass-card p-6 rounded-[40px] flex justify-between items-center transition-all border", isUnlocked ? "border-yellow-400/50 bg-yellow-400/10" : "border-white/5 opacity-40")}>
+        <div className={cn("glass-card p-6 rounded-[40px] flex justify-between items-center transition-all border", isUnlocked ? "border-yellow-400/50 bg-yellow-400/10 shadow-glow-yellow" : "border-white/5 opacity-40")}>
             <div className="flex items-center gap-4 text-left">
                 <div className={cn("p-3 rounded-2xl text-white shadow-lg", color)}><Icon className="h-5 w-5" /></div>
                 <div className="flex flex-col">
