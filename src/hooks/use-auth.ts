@@ -27,7 +27,12 @@ export function useAuth() {
                 .select()
                 .single();
 
-            if (!createError) setProfile(newProfile);
+            if (!createError) {
+                setProfile(newProfile);
+            } else {
+                const { data: retryData } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+                if (retryData) setProfile(retryData);
+            }
         } else {
             setProfile(data);
         }
@@ -70,10 +75,13 @@ export function useAuth() {
         });
 
         if (rpcError) {
-            console.warn("RPC failed, attempting manual update fallback...");
+            console.warn("RPC failed, attempting manual update fallback...", rpcError);
 
             // 2. FALLBACK: Manual update
-            const { data: current } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
+            const { data: current, error: fetchError } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
+
+            if (fetchError) throw fetchError;
+
             const updatedBalance = parseFloat(((current?.cash_balance || 0) + val).toFixed(2));
 
             const { error: updateError } = await supabase
@@ -82,18 +90,16 @@ export function useAuth() {
                 .eq('id', user.id);
 
             if (updateError) throw updateError;
-            setProfile((prev: any) => ({ ...prev, cash_balance: updatedBalance }));
-        } else {
-            setProfile((prev: any) => ({ ...prev, cash_balance: newBalance }));
         }
 
         // Final sync
         await fetchProfile(user.id);
 
     } catch (e: any) {
-        console.error("Sync Error:", e);
+        console.error("Sync Error Detail:", e);
+        // SHOW THE ACTUAL ERROR MESSAGE
         toast.error("Vault Sync Error", {
-            description: "If you haven't run the SQL script in Supabase, your balance cannot be saved.",
+            description: e.message || "Database connection failed.",
             duration: 10000
         });
     }
