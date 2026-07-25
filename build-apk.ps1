@@ -25,9 +25,9 @@ npx cap sync android
 Step "Building Android APK..."
 Set-Location "$ProjectPath\android"
 
-# Running with standard settings but including the fix for VFS watch
+# Running with standard settings
 & .\gradlew.bat clean
-& .\gradlew.bat assembleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password" --no-daemon -Dorg.gradle.vfs.watch=false
+& .\gradlew.bat assembleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password"
 
 Set-Location $ProjectPath
 if (Test-Path $ApkPath) {
