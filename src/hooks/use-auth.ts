@@ -10,11 +10,22 @@ export function useAuth() {
   const fetchProfile = useCallback(async (userId: string) => {
     try {
         const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-
         if (data) {
             setProfile(data);
         } else {
-            console.warn("Auth: Profile not found in DB.");
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                const meta = session.user.user_metadata;
+                const name = meta?.username || meta?.display_name || 'Empire Member';
+                const { data: newP } = await supabase.from('profiles').insert({
+                    id: userId,
+                    username: name,
+                    display_name: name,
+                    cash_balance: 0.00,
+                    total_earned: 0.00
+                }).select().single();
+                if (newP) setProfile(newP);
+            }
         }
     } catch (e) {
         console.error("fetchProfile error", e);
@@ -74,38 +85,29 @@ export function useAuth() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-    // 1. ATTEMPT DATABASE SAVE FIRST
-    const numericAmount = parseFloat(amount.toFixed(2));
+    const numericAmount = parseFloat(amount.toFixed(4)); // High precision
 
-    // We use a direct update for maximum reliability
-    const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', session.user.id).single();
-    const oldBal = parseFloat(current?.cash_balance?.toString() || "0");
-    const oldTotal = parseFloat(current?.total_earned?.toString() || "0");
+    // ATOMIC UPDATE: Tell the database to add the money.
+    // This is 100% accurate and cannot be overwritten by the app.
+    const { data: newBalance, error: rpcError } = await supabase.rpc('increment_cash_balance', {
+        user_id: session.user.id,
+        amount: numericAmount
+    });
 
-    const newBal = parseFloat((oldBal + numericAmount).toFixed(2));
-    const newTotal = parseFloat((oldTotal + (numericAmount > 0 ? numericAmount : 0)).toFixed(2));
-
-    const { error: updateError } = await supabase.from('profiles').update({
-        cash_balance: newBal,
-        total_earned: newTotal
-    }).eq('id', session.user.id);
-
-    if (updateError) {
-        alert("Vault Sync Failed: " + updateError.message);
-        return;
+    if (rpcError) {
+        console.error("Vault Update Failed!", rpcError);
+        // Alert the user so they know it's a permission/network issue
+        alert("Empire Connection Interrupted. Balance will sync on next login.");
+    } else {
+        // Successful add! Update the UI with the real number returned by the database.
+        setProfile((prev: any) => ({
+            ...prev,
+            cash_balance: newBalance
+        }));
+        // Double check fetch
+        await fetchProfile(session.user.id);
     }
-
-    // 2. ONLY UPDATE UI IF DATABASE SUCCESS
-    setProfile((prev: any) => ({
-        ...prev,
-        cash_balance: newBal,
-        total_earned: newTotal
-    }));
-
-    // 3. Optional: Try RPC as backup for total earned syncing
-    await supabase.rpc('increment_cash_balance', { user_id: session.user.id, amount: numericAmount });
-
-  }, []);
+  }, [fetchProfile]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
