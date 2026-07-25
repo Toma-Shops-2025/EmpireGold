@@ -10,7 +10,6 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-        // 1. Get the current profile
         const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
 
         if (error) {
@@ -18,22 +17,28 @@ export function useAuth() {
             return;
         }
 
-        // 2. If it doesn't exist, create it (WITHOUT resetting balance if it somehow exists)
         if (!data) {
             const { data: { session } } = await supabase.auth.getSession();
             const username = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || 'Member';
 
+            // USE INSERT INSTEAD OF UPSERT to avoid overwriting existing data
             const { data: newProfile, error: createError } = await supabase
                 .from('profiles')
-                .upsert({
+                .insert({
                     id: userId,
                     username: username,
                     cash_balance: 0
-                }, { onConflict: 'id' }) // Only insert if not exists
+                })
                 .select()
                 .single();
 
-            if (!createError) setProfile(newProfile);
+            if (!createError) {
+                setProfile(newProfile);
+            } else {
+                // If insert fails because it already exists, just fetch it again
+                const { data: retryData } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+                if (retryData) setProfile(retryData);
+            }
         } else {
             setProfile(data);
         }
@@ -77,10 +82,10 @@ export function useAuth() {
             amount: val
         });
 
-        // 2. If RPC failed or returned nothing, do manual update
-        if (rpcError || rpcResult === null || rpcResult === undefined) {
-            console.warn("RPC failed or returned null, falling back to manual update...");
+        if (rpcError) {
+            console.warn("RPC failed, attempting manual update...");
 
+            // 2. FALLBACK: Manual update with fresh fetch
             const { data: current, error: fetchError } = await supabase
                 .from('profiles')
                 .select('cash_balance')
@@ -97,14 +102,18 @@ export function useAuth() {
                 .eq('id', user.id);
 
             if (updateError) throw updateError;
+
+            setProfile((prev: any) => ({ ...prev, cash_balance: newTotal }));
+        } else {
+            setProfile((prev: any) => ({ ...prev, cash_balance: rpcResult }));
         }
 
-        // 3. ALWAYS refetch the profile after any update to ensure UI is in sync with DB
+        // Final sync check
         await fetchProfile(user.id);
 
     } catch (e: any) {
-        console.error("Critical: Balance update failed", e);
-        toast.error("Vault Sync Error", { description: "Please refresh the page and try again." });
+        console.error("Database Error:", e);
+        toast.error("Database Error", { description: e.message || "Could not save rewards." });
     }
   };
 
@@ -121,7 +130,7 @@ export function useAuth() {
       });
       if (error) throw error;
       if (data.user) {
-          await supabase.from('profiles').upsert({ id: data.user.id, username: u, cash_balance: 0 });
+          await supabase.from('profiles').insert({ id: data.user.id, username: u, cash_balance: 0 });
       }
   };
 
