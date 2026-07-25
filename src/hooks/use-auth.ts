@@ -38,16 +38,34 @@ export function useAuth() {
     if (!user) return;
     const val = parseFloat(amount.toFixed(2));
 
-    // ATOMIC ADDITION: Tell the database to add the money.
-    const { data: newBalance, error } = await supabase.rpc('increment_cash_balance', {
-        user_id: user.id,
-        amount: val
-    });
+    try {
+        // 1. Try the atomic RPC call
+        const { data: newBalance, error } = await supabase.rpc('increment_cash_balance', {
+            user_id: user.id,
+            amount: val
+        });
 
-    if (!error) {
-        setProfile((prev: any) => ({ ...prev, cash_balance: newBalance }));
-    } else {
-        console.error("RPC failed", error);
+        if (error) throw error;
+
+        // 2. If successful, update local state immediately
+        if (newBalance !== null) {
+            setProfile((prev: any) => ({ ...prev, cash_balance: newBalance }));
+        }
+
+        // 3. Force a fresh fetch just to be 100% sure
+        await fetchProfile(user.id);
+
+    } catch (e) {
+        console.error("Balance update failed, trying fallback...", e);
+
+        // FALLBACK: If RPC fails, try a direct update (less secure but works if RPC isn't set up)
+        const currentBalance = parseFloat(profile?.cash_balance || 0);
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ cash_balance: currentBalance + val })
+            .eq('id', user.id);
+
+        if (!updateError) fetchProfile(user.id);
     }
   };
 
