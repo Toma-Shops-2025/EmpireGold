@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { CONFIG } from '@/config'
 import { AdMob, BannerAdPosition, BannerAdSize } from '@capacitor-community/admob'
 import { Browser } from '@capacitor/browser'
+import { App } from '@capacitor/app'
 import {
     Wallet, Play, Gamepad2, Coins, TrendingUp, Trophy,
     Gift, ArrowRight, Loader2, Sparkles, Zap, Flame,
@@ -13,7 +14,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-// UPDATED CATALOG: High-Quality Royal Arcade Games
+// THE EMPIRE GOLD CATALOG
 const GAME_CATALOG = [
     { id: 'g1', name: 'Subway Surfers', category: 'Action', url: 'https://poki.com/en/g/subway-surfers', img: 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=400&q=80', reward: 1.20 },
     { id: 'g2', name: 'Temple Run 2', category: 'Running', url: 'https://poki.com/en/g/temple-run-2', img: 'https://images.unsplash.com/photo-1550745671-03d630974922?w=400&q=80', reward: 0.80 },
@@ -52,6 +53,7 @@ export default function EmpireGoldHub() {
     const auth = useAuth()
     const [activeTab, setActiveTab] = useState<'home' | 'games' | 'payouts'>('home')
     const [isAdLoading, setIsAdLoading] = useState(false)
+    const [gameStartTime, setGameStartTime] = useState<number | null>(null)
 
     // Auth UI States
     const [isLogin, setIsLogin] = useState(true)
@@ -76,6 +78,36 @@ export default function EmpireGoldHub() {
         }
     }, [auth.user]);
 
+    // Track Time and Reward when returning to App
+    useEffect(() => {
+        const handler = App.addListener('appStateChange', ({ isActive }) => {
+            if (isActive && gameStartTime) {
+                const now = Date.now();
+                const elapsedMs = now - gameStartTime;
+                const minutes = Math.floor(elapsedMs / 60000);
+
+                // Reward: $0.05 base + $0.02 per minute
+                const totalReward = 0.05 + (minutes * 0.02);
+
+                auth.addCash(totalReward);
+                setGameStartTime(null);
+
+                toast.success(`Royal Rewards! +$${totalReward.toFixed(2)}`, {
+                    description: `You played for ${minutes} minutes.`,
+                    icon: '👑'
+                });
+
+                // Show Interstitial Ad upon return
+                const isNative = (window as any).Capacitor?.isNativePlatform();
+                if (isNative) {
+                    AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID })
+                        .then(() => AdMob.showInterstitial());
+                }
+            }
+        });
+        return () => { handler.then(h => h.remove()); };
+    }, [gameStartTime, auth]);
+
     const openGame = async (game: any) => {
         setIsAdLoading(true);
         const isNative = (window as any).Capacitor?.isNativePlatform();
@@ -87,19 +119,16 @@ export default function EmpireGoldHub() {
                 await AdMob.showInterstitialAd();
             } catch(e) {}
 
+            // Record start time
+            setGameStartTime(Date.now());
+
             // Open Game in sleek in-app browser
             await Browser.open({ url: game.url, toolbarColor: '#5b21b6' });
-
-            // Once they close the browser, reward them
-            setTimeout(() => {
-                auth.addCash(0.10);
-                toast.success(`Royal Session Complete! +$0.10`, { icon: '👑' });
-            }, 2000);
         } else {
             // Localhost fallback
             window.open(game.url, '_blank');
-            auth.addCash(0.10);
-            toast.success(`Simulated Reward: +$0.10`);
+            setGameStartTime(Date.now());
+            toast.info("Browser opened. Time tracking active.");
         }
 
         setIsAdLoading(false);
@@ -121,10 +150,13 @@ export default function EmpireGoldHub() {
             try {
                 await AdMob.prepareRewardVideoAd({ adId: CONFIG.ADMOB_REWARDED_ID });
                 await AdMob.showRewardVideoAd();
+                await auth.addCash(0.50);
+                toast.success("Empire Boost Applied! +$0.50");
             } catch(e) {}
+        } else {
+            await auth.addCash(0.50);
+            toast.success("Simulated Boost Applied! +$0.50");
         }
-        await auth.addCash(0.50);
-        toast.success("Empire Boost Applied! +$0.50");
         setIsAdLoading(false);
     }
 
@@ -201,8 +233,8 @@ export default function EmpireGoldHub() {
                     </div>
                 </div>
 
-                <div className="space-y-3 relative z-10 px-1">
-                    <div className="flex justify-between text-[11px] font-black text-white uppercase italic tracking-wider">
+                <div className="space-y-3 relative z-10 px-1 text-white">
+                    <div className="flex justify-between text-[11px] font-black uppercase italic tracking-wider">
                         <span>{goalProgress >= 100 ? "Reward Available!" : "One step away!"}</span>
                         <span className="text-yellow-400">{goalProgress}%</span>
                     </div>
@@ -278,9 +310,9 @@ export default function EmpireGoldHub() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 {GAME_CATALOG.slice(4).map(game => (
-                                    <div key={game.id} onClick={() => openGame(game)} className="glass-card p-4 rounded-[35px] active:scale-95 transition-all text-center">
+                                    <div key={game.id} onClick={() => openGame(game)} className="glass-card p-4 rounded-[35px] active:scale-95 transition-all text-center text-white">
                                         <img src={game.img} className="w-full h-24 object-cover rounded-[24px] mb-3" />
-                                        <span className="block font-black text-[10px] uppercase truncate text-white">{game.name}</span>
+                                        <span className="block font-black text-[10px] uppercase truncate">{game.name}</span>
                                         <span className="block text-[8px] font-bold text-green-400 mt-1">${game.reward.toFixed(2)} Rewards</span>
                                     </div>
                                 ))}
@@ -311,6 +343,12 @@ export default function EmpireGoldHub() {
                              {REWARDS.map(r => (
                                  <RewardCard key={r.id} title={r.name} cost={`$${r.cost.toFixed(2)}`} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} locked={cashBalance < r.cost} />
                              ))}
+                        </div>
+
+                        <div className="mt-8 flex flex-col items-center gap-4 text-center pb-20 relative z-10">
+                            <div className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em] text-white">Empire Member</div>
+                            <span className="text-xl font-black italic border-b border-primary/20 pb-1 text-primary">{auth.profile?.username || 'Empire Member'}</span>
+                            <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
                         </div>
                     </div>
                 )}
