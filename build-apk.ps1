@@ -12,7 +12,12 @@ $ErrorActionPreference = "Stop"
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 
 Step "Ensuring Clean Cache Directory..."
-if (!(Test-Path "C:\gradle_cache")) { New-Item -ItemType Directory -Path "C:\gradle_cache" -Force }
+# COMPLETELY WIPE THE CACHE to ensure no corrupted files
+if (Test-Path "C:\gradle_cache") {
+    Write-Host "Wiping C:\gradle_cache..."
+    Remove-Item -Recurse -Force "C:\gradle_cache"
+}
+New-Item -ItemType Directory -Path "C:\gradle_cache" -Force
 
 Step "Force Stopping Gradle..."
 Set-Location "$ProjectPath\android"
@@ -30,9 +35,9 @@ npx cap sync android
 
 Step "Building Android APK (Direct Path Build)..."
 Set-Location "$ProjectPath\android"
-# Added --refresh-dependencies and --no-daemon for maximum stability
+# Added --refresh-dependencies, --no-daemon, and --no-build-cache for maximum stability
 & .\gradlew.bat clean
-& .\gradlew.bat assembleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password" --no-daemon --refresh-dependencies
+& .\gradlew.bat assembleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password" --no-daemon --refresh-dependencies --no-build-cache
 
 Set-Location $ProjectPath
 if (Test-Path $ApkPath) {
