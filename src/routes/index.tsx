@@ -37,13 +37,14 @@ const REWARDS = [
 
 function AppBackground() {
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
         <img
             src="/bg-gold.png"
-            className="w-full h-full object-cover opacity-30 animate-in fade-in duration-1000"
+            className="w-full h-full object-cover opacity-40 animate-in fade-in duration-1000"
             alt=""
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#4c1d95]/80 via-black/85 to-black" />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
     </div>
   )
 }
