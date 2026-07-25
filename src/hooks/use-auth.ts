@@ -82,17 +82,30 @@ export function useAuth() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-    const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', session.user.id).single();
-    const newBalance = Number(current?.cash_balance || 0) + amount;
-    const newTotal = Number(current?.total_earned || 0) + (amount > 0 ? amount : 0);
+    // ATOMIC INCREMENT: Add the amount directly in the database
+    // This fixes the bug where previous scores were being overwritten!
+    const { error } = await supabase.rpc('increment_cash_balance', {
+        user_id: session.user.id,
+        amount: amount
+    });
 
-    await supabase.from('profiles').update({
-        cash_balance: newBalance,
-        total_earned: newTotal
-    }).eq('id', session.user.id);
+    if (error) {
+        // Fallback if RPC fails: Manual Fetch-Add-Update
+        const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', session.user.id).single();
+        const newBalance = Number(current?.cash_balance || 0) + amount;
+        const newTotal = Number(current?.total_earned || 0) + (amount > 0 ? amount : 0);
 
-    setProfile((prev: any) => ({ ...prev, cash_balance: newBalance, total_earned: newTotal }));
-  }, []);
+        await supabase.from('profiles').update({
+            cash_balance: newBalance,
+            total_earned: newTotal
+        }).eq('id', session.user.id);
+
+        setProfile((prev: any) => ({ ...prev, cash_balance: newBalance, total_earned: newTotal }));
+    } else {
+        // Successful atomic update, refresh the local UI state
+        fetchProfile(session.user.id);
+    }
+  }, [fetchProfile]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
