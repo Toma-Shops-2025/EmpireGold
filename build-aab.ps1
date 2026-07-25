@@ -32,6 +32,7 @@ if ($content -match 'versionCode\s+(\d+)') {
 
 Step "Building Android AAB..."
 Set-Location "$ProjectPath\android"
+& .\gradlew.bat --stop
 & .\gradlew.bat clean
 & .\gradlew.bat bundleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password"
 
