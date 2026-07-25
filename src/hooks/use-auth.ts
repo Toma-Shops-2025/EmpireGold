@@ -10,14 +10,18 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        // Fetch using a simple select to be more resilient than .single()
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId);
 
         if (error) {
             console.error("Error fetching profile:", error);
             return;
         }
 
-        if (!data) {
+        if (!data || data.length === 0) {
             const { data: { session } } = await supabase.auth.getSession();
             const username = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || 'Member';
 
@@ -27,14 +31,9 @@ export function useAuth() {
                 .select()
                 .single();
 
-            if (!createError) {
-                setProfile(newProfile);
-            } else {
-                const { data: retryData } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-                if (retryData) setProfile(retryData);
-            }
+            if (!createError) setProfile(newProfile);
         } else {
-            setProfile(data);
+            setProfile(data[0]);
         }
     } catch (e) {
         console.error(e);
@@ -44,12 +43,15 @@ export function useAuth() {
   }, []);
 
   useEffect(() => {
+    // Initial Session Check
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
           setUser(session.user);
           fetchProfile(session.user.id);
       } else { setLoading(false); }
     });
+
+    // Auth Change Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
           setUser(session.user);
@@ -60,48 +62,57 @@ export function useAuth() {
           setLoading(false);
       }
     });
+
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
+
+  // REAL-TIME SUBSCRIPTION
+  // This makes the UI update INSTANTLY when the database changes
+  useEffect(() => {
+      if (!user) return;
+
+      const channel = supabase
+          .channel('schema-db-changes')
+          .on(
+              'postgres_changes',
+              { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+              (payload) => {
+                  setProfile(payload.new);
+              }
+          )
+          .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   const addCash = async (amount: number) => {
     if (!user) return;
     const val = parseFloat(amount.toFixed(2));
 
     try {
-        // 1. Try the atomic RPC call
-        const { data: newBalance, error: rpcError } = await supabase.rpc('increment_cash_balance', {
+        // Try the atomic RPC call
+        const { error: rpcError } = await supabase.rpc('increment_cash_balance', {
             user_id: user.id,
             amount: val
         });
 
         if (rpcError) {
-            console.warn("RPC failed, attempting manual update fallback...", rpcError);
+            console.warn("RPC failed, attempting manual update fallback...");
 
-            // 2. FALLBACK: Manual update
-            const { data: current, error: fetchError } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
-
-            if (fetchError) throw fetchError;
-
+            const { data: current } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
             const updatedBalance = parseFloat(((current?.cash_balance || 0) + val).toFixed(2));
 
-            const { error: updateError } = await supabase
+            await supabase
                 .from('profiles')
                 .update({ cash_balance: updatedBalance })
                 .eq('id', user.id);
-
-            if (updateError) throw updateError;
         }
 
-        // Final sync
-        await fetchProfile(user.id);
+        // We don't need to manually refetch here because the Realtime listener above will catch it!
 
     } catch (e: any) {
-        console.error("Sync Error Detail:", e);
-        // SHOW THE ACTUAL ERROR MESSAGE
-        toast.error("Vault Sync Error", {
-            description: e.message || "Database connection failed.",
-            duration: 10000
-        });
+        console.error("Sync Error:", e);
+        toast.error("Vault Sync Error", { description: "Database rejected the save. Please check your connection." });
     }
   };
 
