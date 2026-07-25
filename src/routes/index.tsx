@@ -8,7 +8,8 @@ import { App } from '@capacitor/app'
 import {
     Wallet, Gamepad2, Coins, TrendingUp, Trophy,
     Gift, Loader2, Zap, User as UserIcon, LogOut,
-    ChevronRight, LayoutGrid, Award, CreditCard, Lock, Mail, ExternalLink, History
+    ChevronRight, LayoutGrid, Award, CreditCard, Lock, Mail, ExternalLink, History,
+    PlayCircle
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -37,7 +38,7 @@ function AppBackground() {
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
         <img
             src="/bg-gold.png"
-            className="w-full h-full object-cover opacity-60 scale-105 transition-opacity duration-1000"
+            className="w-full h-full object-cover opacity-50 scale-105"
             alt=""
         />
         <div className="absolute inset-0 bg-black/40" />
@@ -48,57 +49,31 @@ function AppBackground() {
 
 export default function EmpireGoldHub() {
     const auth = useAuth()
-    const [activeTab, setActiveTab] = useState<'portals' | 'mygames' | 'payouts'>('portals')
+    const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'mygames' | 'payouts'>('home')
     const [isAdLoading, setIsAdLoading] = useState(false)
     const [gameStartTime, setGameStartTime] = useState<number | null>(null)
-    const [history, setHistory] = useState<Record<string, { name: string, time: number }>>(() => {
-        const saved = localStorage.getItem('empire_gold_history_v3');
+    const [history, setHistory] = useState<Record<string, number>>(() => {
+        const saved = localStorage.getItem('empire_gold_history_v4');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
     });
 
-    // Auth UI States
-    const [isLogin, setIsLogin] = useState(true)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [username, setUsername] = useState('')
-    const [agreed, setAgreed] = useState(false)
-
-    // AdMob Initialization
-    useEffect(() => {
-        const initAds = async () => {
-            try {
-                const isNative = (window as any).Capacitor?.isNativePlatform();
-                if (isNative) {
-                    await AdMob.initialize();
-                }
-            } catch (e) {
-                console.error("AdMob init error", e);
-            }
-        };
-        if (auth.user) initAds();
-    }, [auth.user]);
+    const [isLogin, setIsLogin] = useState(true)
 
     // Handle App Resume (Reward logic)
     useEffect(() => {
         let listener: any = null;
-
         const setupListener = async () => {
-            const isNative = (window as any).Capacitor?.isNativePlatform();
-            if (!isNative) return;
-
-            listener = await App.addListener('appStateChange', async (state) => {
-                if (state.isActive && gameStartTime) {
+            if (!(window as any).Capacitor?.isNativePlatform()) return;
+            listener = await App.addListener('appStateChange', async ({ isActive }) => {
+                if (isActive && gameStartTime) {
                     const elapsed = Math.max(1, Math.floor((Date.now() - gameStartTime) / 60000));
                     const reward = 0.05 + (elapsed * 0.02);
                     setGameStartTime(null);
-
                     await auth.addCash(reward);
-
-                    toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, {
-                        description: `You played for ${elapsed} minute(s).`,
-                        icon: '👑'
-                    });
-
+                    toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsed} min`, icon: '👑' });
                     try {
                         await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
                         await AdMob.showInterstitial();
@@ -106,19 +81,16 @@ export default function EmpireGoldHub() {
                 }
             });
         };
-
         if (auth.user) setupListener();
         return () => { if (listener) listener.remove(); };
-    }, [gameStartTime, auth.user, auth.addCash]);
+    }, [gameStartTime, auth.user]);
 
-    const openPortal = async (portalId: string, portalName: string, url: string) => {
-        // Save history
-        const newHistory = { ...history, [portalId]: { name: portalName, time: Date.now() } };
+    const openPortal = async (portalId: string, url: string) => {
+        const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
-        localStorage.setItem('empire_gold_history_v3', JSON.stringify(newHistory));
+        localStorage.setItem('empire_gold_history_v4', JSON.stringify(newHistory));
 
-        const isNative = (window as any).Capacitor?.isNativePlatform();
-        if (isNative) {
+        if ((window as any).Capacitor?.isNativePlatform()) {
             try {
                 await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
                 await AdMob.showInterstitialAd();
@@ -128,22 +100,35 @@ export default function EmpireGoldHub() {
         } else {
             window.open(url, '_blank');
             setGameStartTime(Date.now());
-            toast.info(`Opening ${portalName}...`);
+            toast.info("Arcade opened. Wealth accumulating...");
         }
+    }
+
+    const handleAdWatch = async () => {
+        setIsAdLoading(true);
+        const isNative = (window as any).Capacitor?.isNativePlatform();
+        if (isNative) {
+            try {
+                await AdMob.prepareRewardVideoAd({ adId: CONFIG.ADMOB_REWARDED_ID });
+                await AdMob.showRewardVideoAd();
+                await auth.addCash(0.10);
+                toast.success("Reward Earned! +$0.10");
+            } catch(e) {
+                toast.error("Ad not available yet.");
+            }
+        } else {
+            await auth.addCash(0.10);
+            toast.success("Simulated Reward: +$0.10");
+        }
+        setIsAdLoading(false);
     }
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!isLogin && !agreed) return toast.error("Please agree to the terms.");
         try {
-            if (isLogin) {
-                await auth.signIn(email, password);
-            } else {
-                await auth.signUp(email, password, username);
-            }
-        } catch (err: any) {
-            toast.error(err.message || "Authentication failed");
-        }
+            if (isLogin) await auth.signIn(email, password);
+            else await auth.signUp(email, password, username);
+        } catch (err: any) { toast.error(err.message); }
     }
 
     if (auth.loading) return (
@@ -161,33 +146,26 @@ export default function EmpireGoldHub() {
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
                     Empire<br/><span className="text-yellow-400 font-serif">Gold</span>
                 </h1>
-
                 <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
                     {!isLogin && (
                         <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
-                            <input type="text" placeholder="Username" className="bg-transparent outline-none w-full font-bold text-white" value={username} onChange={e => setUsername(e.target.value)} required />
+                            <input type="text" placeholder="Username" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={username} onChange={e => setUsername(e.target.value)} required />
                         </div>
                     )}
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Mail className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="email" placeholder="Email" className="bg-transparent outline-none w-full font-bold text-white" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="email" placeholder="Email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
                     </div>
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={password} onChange={e => setPassword(e.target.value)} required />
                     </div>
-                    {!isLogin && (
-                        <div className="flex items-center gap-3 px-2 py-2">
-                            <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="accent-yellow-400" />
-                            <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">I agree to terms</span>
-                        </div>
-                    )}
                     <button type="submit" className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4">
-                        {isLogin ? 'Enter Vault' : 'Claim Bonus'}
+                        {isLogin ? 'Enter Vault' : 'Join Empire'}
                     </button>
                     <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/40 font-black uppercase mt-6 underline tracking-[0.2em] relative z-10">
-                        {isLogin ? "Need access? Sign Up" : "Back to Login"}
+                        {isLogin ? "Need an account? Sign Up" : "Back to Login"}
                     </button>
                 </form>
             </div>
@@ -195,14 +173,13 @@ export default function EmpireGoldHub() {
     }
 
     const cashBalance = parseFloat(auth.profile?.cash_balance?.toString() || "0");
-    const nextMilestone = REWARDS.find(r => cashBalance < r.cost)?.cost || 50.00;
-    const goalPct = Math.min(100, Math.max(0, Math.floor((cashBalance / nextMilestone) * 100))) || 0;
+    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
 
     return (
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
             <AppBackground />
 
-            {/* ROYAL HEADER */}
+            {/* HEADER */}
             <div className="pt-16 pb-12 px-6 rounded-b-[60px] shadow-2xl relative overflow-hidden glass-panel z-10 border-b border-white/5">
                 <div className="flex justify-between items-start mb-10 relative z-10">
                     <div className="space-y-1 text-left">
@@ -216,30 +193,26 @@ export default function EmpireGoldHub() {
                     </div>
                 </div>
 
-                {/* LABELED PROGRESS BAR */}
+                {/* PROGRESS BAR */}
                 <div className="space-y-4 relative z-10 px-1">
-                    <div className="flex justify-between text-[10px] font-black uppercase italic tracking-wider">
-                        <span className="opacity-40">{goalPct >= 100 ? "Reward Ready!" : "One step away!"}</span>
-                        <span className="text-yellow-400">{goalPct}% to ${nextMilestone.toFixed(0)}</span>
+                    <div className="flex justify-between text-[11px] font-black uppercase italic tracking-wider">
+                        <span className="opacity-40">Progress</span>
+                        <span className="text-yellow-400">{goalPct.toFixed(0)}% to $50.00</span>
                     </div>
                     <div className="relative pt-4">
                         <div className="h-4 w-full bg-black/40 rounded-full overflow-hidden p-1 border border-white/5">
                             <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.4)] transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
                         </div>
-                        {/* Labels and Breaks */}
                         <div className="absolute -top-1 inset-x-0 flex justify-between px-2 text-[8px] font-black text-white/40 uppercase tracking-tighter">
                             <span>$0</span>
                             <div className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-white/20 mb-1" />
-                                <span>$5</span>
+                                <div className="h-2 w-px bg-white/20 mb-1" /><span>$5</span>
                             </div>
                             <div className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-white/20 mb-1" />
-                                <span>$10</span>
+                                <div className="h-2 w-px bg-white/20 mb-1" /><span>$10</span>
                             </div>
                             <div className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-white/20 mb-1" />
-                                <span>$25</span>
+                                <div className="h-2 w-px bg-white/20 mb-1" /><span>$25</span>
                             </div>
                             <span>$50</span>
                         </div>
@@ -249,62 +222,75 @@ export default function EmpireGoldHub() {
 
             <div className="flex-1 overflow-y-auto px-6 pt-8 pb-32 no-scrollbar relative z-10">
 
+                {/* DASHBOARD (SCREENSHOT 1) */}
                 {activeTab === 'home' && (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                        {/* CONTINUE PLAYING */}
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-2 px-2 text-white/60">
-                                <History className="h-4 w-4" />
-                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] italic">Continue Playing</h3>
+                    <div className="grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-bottom-6 duration-500">
+                        <DashButton icon={Layers} label="Portals" color="bg-blue-600" onClick={() => setActiveTab('portals')} />
+                        <DashButton icon={Gamepad2} label="My Games" color="bg-purple-600" onClick={() => setActiveTab('mygames')} />
+                        <DashButton icon={Award} label="Wins" color="bg-orange-600" onClick={() => setActiveTab('payouts')} />
+                        <button onClick={handleAdWatch} className="glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow">
+                            <div className="flex items-center gap-6">
+                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl"><PlayCircle className="h-8 w-8" /></div>
+                                <div className="flex flex-col text-left">
+                                    <span className="font-black text-white uppercase text-lg italic">Watch Ad</span>
+                                    <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-[0.2em]">Earn $0.10 Gold</span>
+                                </div>
                             </div>
-                            <div className="grid grid-cols-1 gap-3">
-                                {PROVIDERS.map(p => {
-                                    const entry = history[p.id];
-                                    return (
-                                        <div key={p.id} onClick={() => openPortal(p.id, p.name, p.url)} className="glass-card p-5 rounded-[40px] flex items-center justify-between active:scale-[0.98] transition-all group border border-white/5 shadow-xl">
-                                            <div className="flex items-center gap-4 text-left">
-                                                <div className={cn("p-3 rounded-2xl text-white shadow-lg", p.color)}>
-                                                    <p.icon className="h-6 w-6" />
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-black text-white uppercase text-xs tracking-tight">{p.name}</span>
-                                                    <span className="text-[9px] text-white/30 font-bold mt-1 uppercase tracking-wider">
-                                                        {entry ? `Last active: ${new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Play to track your last game"}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-yellow-400 transition-colors" />
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </div>
+                            <ChevronRight className="h-6 w-6 text-yellow-400" />
+                        </button>
+                    </div>
+                )}
 
-                        {/* ELITE PORTALS */}
-                        <div className="space-y-4 pb-12 border-t border-white/5 pt-8">
-                            <div className="flex items-center gap-2 px-2 text-white/60">
-                                <LayoutGrid className="h-4 w-4" />
-                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] italic">Elite Portals</h3>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                {PROVIDERS.map(p => (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => openPortal(p.id, p.name, p.url)}
-                                        className={cn("p-6 rounded-[35px] text-left relative overflow-hidden active:scale-95 transition-all glass-card border border-white/10 shadow-2xl", p.color)}
-                                    >
-                                        <div className="absolute top-0 right-0 p-4 opacity-10">
-                                            <ExternalLink className="h-10 w-10" />
+                {/* PORTALS (SCREENSHOT 2) */}
+                {activeTab === 'portals' && (
+                    <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                         <h2 className="text-4xl font-black italic uppercase text-center mt-4">Elite <span className="text-yellow-400">Portals</span></h2>
+                         <div className="grid grid-cols-2 gap-4">
+                            {PROVIDERS.map(p => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => openPortal(p.id, p.url)}
+                                    className={cn("p-6 h-48 rounded-[45px] text-left relative overflow-hidden active:scale-95 transition-all glass-card border border-white/10 shadow-2xl", p.color)}
+                                >
+                                    <div className="absolute top-0 right-0 p-4 opacity-10"><ExternalLink className="h-12 w-12" /></div>
+                                    <span className="block font-black uppercase text-base italic leading-tight">{p.name}</span>
+                                    <span className="block text-[8px] font-bold opacity-60 mt-1 uppercase tracking-tighter">Enter Arcade</span>
+                                </button>
+                            ))}
+                         </div>
+                    </div>
+                )}
+
+                {/* MY GAMES (SCREENSHOT 3) */}
+                {activeTab === 'mygames' && (
+                    <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                        <div className="flex items-center gap-2 px-2 text-white/60 mb-4">
+                            <History className="h-4 w-4" />
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] italic">History Tracking</h3>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                            {PROVIDERS.map(p => {
+                                const time = history[p.id];
+                                return (
+                                    <div key={p.id} onClick={() => openPortal(p.id, p.url)} className="glass-card p-6 rounded-[45px] flex items-center justify-between active:scale-[0.98] transition-all group border border-white/5 shadow-2xl">
+                                        <div className="flex items-center gap-5 text-left">
+                                            <div className={cn("p-4 rounded-2xl text-white shadow-lg", p.color)}><p.icon className="h-6 w-6" /></div>
+                                            <div className="flex flex-col">
+                                                <span className="font-black text-white uppercase text-xs tracking-tight">{p.name}</span>
+                                                <span className="text-[10px] text-yellow-400/80 font-bold mt-1 uppercase tracking-wider">
+                                                    {time ? `Last active: ${new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Play to track your last game"}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <span className="block font-black uppercase text-sm italic leading-tight">{p.name}</span>
-                                        <span className="block text-[8px] font-bold opacity-60 mt-1 uppercase tracking-tighter">{p.desc}</span>
-                                    </button>
-                                ))}
-                            </div>
+                                        <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-yellow-400 transition-colors" />
+                                    </div>
+                                )
+                            })}
                         </div>
                     </div>
                 )}
 
+                {/* WINS (SCREENSHOT 4) */}
                 {activeTab === 'payouts' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300 px-2 pb-32">
                         <div className="space-y-4 mt-4">
@@ -314,38 +300,47 @@ export default function EmpireGoldHub() {
                              ))}
                         </div>
 
-                        <div className="mt-12 flex flex-col items-center gap-4 text-center pb-20 relative z-10 text-white">
-                            <span className="text-xl font-black italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || 'Empire Member'}</span>
-                            <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
+                        <div className="mt-12 flex flex-col items-center gap-4 text-center pb-20 relative z-10 text-white font-black uppercase">
+                            <span className="text-xl italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || auth.user?.email || 'Empire Member'}</span>
+                            <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* NAVIGATION */}
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-4 z-[5000]">
-                <NavButton icon={TrendingUp} label="Portals" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                <NavButton icon={Gamepad2} label="My Games" active={activeTab === 'arcade'} onClick={() => setActiveTab('arcade')} />
+                <NavButton icon={TrendingUp} label="Dashboard" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                <NavButton icon={Layers} label="Portals" active={activeTab === 'portals'} onClick={() => setActiveTab('portals')} />
                 <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => setActiveTab('payouts')} />
             </nav>
         </div>
     )
 }
 
+function DashButton({ icon: Icon, label, color, onClick }: any) {
+    return (
+        <button onClick={onClick} className="glass-card p-7 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-white/5 shadow-2xl">
+            <div className="flex items-center gap-6 text-left">
+                <div className={cn("p-4 rounded-3xl text-white shadow-lg", color)}><Icon className="h-6 w-6" /></div>
+                <span className="font-black text-white uppercase text-lg italic tracking-tight">{label}</span>
+            </div>
+            <ChevronRight className="h-5 w-5 text-white/20" />
+        </button>
+    )
+}
+
 function RewardCard({ title, cost, balance, icon: Icon, color }: any) {
     const isUnlocked = balance >= cost;
     return (
-        <div className={cn("glass-card p-6 rounded-[40px] flex justify-between items-center transition-all border", isUnlocked ? "border-yellow-400/50 shadow-[0_0_30px_rgba(250,204,21,0.2)] bg-yellow-400/10" : "border-white/5 opacity-40 shadow-2xl")}>
+        <div className={cn("glass-card p-6 rounded-[40px] flex justify-between items-center transition-all border", isUnlocked ? "border-yellow-400/50 bg-yellow-400/10" : "border-white/5 opacity-40")}>
             <div className="flex items-center gap-4 text-left">
-                <div className={cn("p-3 rounded-2xl text-white shadow-lg", color)}>
-                    <Icon className="h-5 w-5" />
-                </div>
+                <div className={cn("p-3 rounded-2xl text-white shadow-lg", color)}><Icon className="h-5 w-5" /></div>
                 <div className="flex flex-col">
                     <span className="font-black text-xs uppercase tracking-tight text-white">{title}</span>
                     <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{isUnlocked ? "READY TO CLAIM" : `$${cost.toFixed(2)} Required`}</span>
                 </div>
             </div>
-            {isUnlocked ? <button className="bg-white text-black text-[10px] font-black px-4 py-2 rounded-xl animate-pulse shadow-glow">REDEEM</button> : <Lock className="h-4 w-4 text-white/20" />}
+            {isUnlocked ? <button className="bg-white text-black text-[10px] font-black px-4 py-2 rounded-xl animate-pulse">REDEEM</button> : <Lock className="h-4 w-4 text-white/20" />}
         </div>
     )
 }
@@ -357,4 +352,10 @@ function NavButton({ icon: Icon, label, active, onClick }: { icon: any, label: s
         <span className={cn("text-[8px] font-black uppercase tracking-widest", active ? "opacity-100" : "opacity-40")}>{label}</span>
       </button>
     );
+}
+
+function Layers(props: any) {
+    return (
+        <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+    )
 }
