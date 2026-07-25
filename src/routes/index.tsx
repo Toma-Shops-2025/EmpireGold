@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { CONFIG } from '@/config'
@@ -12,6 +12,7 @@ import {
     PlayCircle, Sparkles
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Capacitor } from '@capacitor/core'
 
 // THE EMPIRE GOLD PROVIDERS
 const PROVIDERS = [
@@ -51,7 +52,6 @@ export default function EmpireGoldHub() {
     const auth = useAuth()
     const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'mygames' | 'payouts'>('home')
     const [isAdLoading, setIsAdLoading] = useState(false)
-    const [gameStartTime, setGameStartTime] = useState<number | null>(null)
     const [history, setHistory] = useState<Record<string, number>>(() => {
         const saved = localStorage.getItem('empire_gold_history_v5');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
@@ -70,68 +70,74 @@ export default function EmpireGoldHub() {
         return PROVIDERS.find(p => p.id === id);
     }, [history]);
 
-    // Handle App Resume / Window Focus (Reward logic for both mobile and web)
+    // CHECK FOR PENDING REWARDS
+    const checkRewards = useCallback(async () => {
+        const startTime = localStorage.getItem('empire_gold_session_start');
+        if (startTime && auth.user) {
+            const start = parseInt(startTime);
+            const now = Date.now();
+            const elapsedMinutes = Math.floor((now - start) / 60000);
+
+            // Formula: $0.05 base + $0.02 per minute
+            const reward = 0.05 + (elapsedMinutes * 0.02);
+
+            localStorage.removeItem('empire_gold_session_start');
+            await auth.addCash(reward);
+
+            toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, {
+                description: `Session: ${elapsedMinutes} min`,
+                icon: '👑'
+            });
+        }
+    }, [auth]);
+
+    // Monitor for return to app
     useEffect(() => {
-        const handleReturn = async () => {
-            if (gameStartTime) {
-                const now = Date.now();
-                const diffMs = now - gameStartTime;
-                const elapsedMinutes = Math.floor(diffMs / 60000);
+        if (!auth.user) return;
 
-                // Minimum 1 minute reward, otherwise just the base $0.05
-                // Formula: $0.05 base + $0.02 per minute
-                const reward = 0.05 + (elapsedMinutes * 0.02);
+        // Check immediately on mount/auth
+        checkRewards();
 
-                setGameStartTime(null);
-                await auth.addCash(reward);
-
-                toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, {
-                    description: `You played for ${elapsedMinutes} minute${elapsedMinutes === 1 ? '' : 's'}.`,
-                    icon: '👑'
-                });
-            }
+        // Listen for visibility changes (switching back to tab)
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') checkRewards();
         };
 
-        // For Native App
+        // Listen for App Resume (Native)
         let appListener: any = null;
-        const setupNative = async () => {
-            if (Capacitor.isNativePlatform()) {
-                appListener = await App.addListener('appStateChange', ({ isActive }) => {
-                    if (isActive) handleReturn();
-                });
-            }
-        };
-        setupNative();
+        if (Capacitor.isNativePlatform()) {
+            App.addListener('appStateChange', ({ isActive }) => {
+                if (isActive) checkRewards();
+            }).then(l => appListener = l);
+        }
 
-        // For Web
-        const onFocus = () => handleReturn();
-        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener('focus', onVisibilityChange);
 
         return () => {
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            window.removeEventListener('focus', onVisibilityChange);
             if (appListener) appListener.remove();
-            window.removeEventListener('focus', onFocus);
         };
-    }, [gameStartTime, auth.addCash]);
+    }, [auth.user, checkRewards]);
 
     const openPortal = async (portalId: string, url: string) => {
         const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
         localStorage.setItem('empire_gold_history_v5', JSON.stringify(newHistory));
-
-        setGameStartTime(Date.now());
+        localStorage.setItem('empire_gold_session_start', Date.now().toString());
 
         if (Capacitor.isNativePlatform()) {
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
             window.open(url, '_blank');
-            toast.info("Arcade opened in a new tab! Return here when finished to collect your rewards.");
+            toast.info("Arcade opened! Return here when finished to claim your Gold.");
         }
     }
 
     const handleAdWatch = async () => {
         setIsAdLoading(true);
-        const isNative = (window as any).Capacitor?.isNativePlatform();
-        if (isNative) {
+        if (Capacitor.isNativePlatform()) {
             try {
                 await AdMob.prepareRewardVideoAd({ adId: CONFIG.ADMOB_REWARDED_ID });
                 await AdMob.showRewardVideoAd();
@@ -229,7 +235,7 @@ export default function EmpireGoldHub() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 pt-8 pb-32 no-scrollbar relative z-10">
+            <div className="flex-1 overflow-y-auto px-6 pt-8 pb-32 no-scrollbar relative z-10 text-left">
 
                 {/* DASHBOARD */}
                 {activeTab === 'home' && (
@@ -260,11 +266,13 @@ export default function EmpireGoldHub() {
                         <DashButton icon={History} label="My History" color="bg-purple-600" onClick={() => setActiveTab('mygames')} />
                         <DashButton icon={Award} label="Vault Wins" color="bg-orange-600" onClick={() => setActiveTab('payouts')} />
 
-                        <button onClick={handleAdWatch} className="glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow">
+                        <button onClick={handleAdWatch} disabled={isAdLoading} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50">
                             <div className="flex items-center gap-6">
-                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl"><PlayCircle className="h-8 w-8" /></div>
+                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">
+                                    {isAdLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}
+                                </div>
                                 <div className="flex flex-col text-left">
-                                    <span className="font-black text-white uppercase text-lg italic">Watch Ad</span>
+                                    <span className="font-black text-white uppercase text-lg italic">{isAdLoading ? "Loading..." : "Watch Ad"}</span>
                                     <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-[0.2em]">Earn $0.10 Gold</span>
                                 </div>
                             </div>
@@ -298,13 +306,13 @@ export default function EmpireGoldHub() {
                     <div className="space-y-6 animate-in slide-in-from-right duration-300">
                         <div className="flex items-center gap-2 px-2 text-white/60 mb-4">
                             <History className="h-4 w-4" />
-                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] italic text-left">Recent Activity</h3>
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] italic">Recent Activity</h3>
                         </div>
-                        <div className="grid grid-cols-1 gap-3 text-left">
+                        <div className="grid grid-cols-1 gap-3">
                             {PROVIDERS.map(p => {
                                 const time = history[p.id];
                                 return (
-                                    <div key={p.id} onClick={() => openPortal(p.id, p.url)} className="glass-card p-6 rounded-[45px] flex items-center justify-between active:scale-[0.98] transition-all group border border-white/5 shadow-2xl">
+                                    <div key={p.id} onClick={() => openPortal(p.id, p.url)} className="glass-card p-6 rounded-[45px] flex items-center justify-between active:scale-[0.98] transition-all group border border-white/5 shadow-2xl cursor-pointer">
                                         <div className="flex items-center gap-5">
                                             <div className={cn("p-4 rounded-2xl text-white shadow-lg", p.color)}><p.icon className="h-6 w-6" /></div>
                                             <div className="flex flex-col">
@@ -326,7 +334,7 @@ export default function EmpireGoldHub() {
                 {activeTab === 'payouts' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300 px-2 pb-32">
                         <div className="space-y-4 mt-4">
-                             <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-4 text-white text-left">Vault Rewards</h4>
+                             <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-4 text-white">Vault Rewards</h4>
                              {REWARDS.map(r => (
                                  <RewardCard key={r.id} title={r.name} cost={r.cost} balance={cashBalance} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} />
                              ))}
@@ -352,7 +360,7 @@ export default function EmpireGoldHub() {
 
 function DashButton({ icon: Icon, label, color, onClick }: any) {
     return (
-        <button onClick={onClick} className="glass-card p-7 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-white/5 shadow-2xl">
+        <button onClick={onClick} className="glass-card p-7 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-white/5 shadow-2xl w-full">
             <div className="flex items-center gap-6 text-left">
                 <div className={cn("p-4 rounded-3xl text-white shadow-lg", color)}><Icon className="h-6 w-6" /></div>
                 <span className="font-black text-white uppercase text-lg italic tracking-tight">{label}</span>

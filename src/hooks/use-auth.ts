@@ -9,9 +9,17 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-        const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-        if (data) setProfile(data);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        if (data) {
+            setProfile(data);
+        } else if (error) {
+            console.error("Error fetching profile:", error);
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -38,35 +46,35 @@ export function useAuth() {
     if (!user) return;
     const val = parseFloat(amount.toFixed(2));
 
-    try {
-        // 1. Try the atomic RPC call
-        const { data: newBalance, error } = await supabase.rpc('increment_cash_balance', {
-            user_id: user.id,
-            amount: val
-        });
+    // 1. Try the atomic RPC call (Best Practice)
+    const { data: newBalance, error } = await supabase.rpc('increment_cash_balance', {
+        user_id: user.id,
+        amount: val
+    });
 
-        if (error) throw error;
+    if (!error) {
+        setProfile((prev: any) => ({ ...prev, cash_balance: newBalance }));
+        return newBalance;
+    } else {
+        console.warn("RPC failed, attempting direct update fallback...");
 
-        // 2. If successful, update local state immediately
-        if (newBalance !== null) {
-            setProfile((prev: any) => ({ ...prev, cash_balance: newBalance }));
-        }
+        // 2. FALLBACK: Direct table update if RPC isn't found
+        // First, get the freshest balance
+        const { data: currentData } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
+        const currentBalance = parseFloat(currentData?.cash_balance || 0);
+        const updatedBalance = currentBalance + val;
 
-        // 3. Force a fresh fetch just to be 100% sure
-        await fetchProfile(user.id);
-
-    } catch (e) {
-        console.error("Balance update failed, trying fallback...", e);
-
-        // FALLBACK: If RPC fails, try a direct update (less secure but works if RPC isn't set up)
-        const currentBalance = parseFloat(profile?.cash_balance || 0);
         const { error: updateError } = await supabase
             .from('profiles')
-            .update({ cash_balance: currentBalance + val })
+            .update({ cash_balance: updatedBalance })
             .eq('id', user.id);
 
-        if (!updateError) fetchProfile(user.id);
+        if (!updateError) {
+            setProfile((prev: any) => ({ ...prev, cash_balance: updatedBalance }));
+            return updatedBalance;
+        }
     }
+    return null;
   };
 
   const signIn = (e: string, p: string) => supabase.auth.signInWithPassword({ email: e, password: p });
