@@ -70,39 +70,61 @@ export default function EmpireGoldHub() {
         return PROVIDERS.find(p => p.id === id);
     }, [history]);
 
-    // Handle App Resume (Reward logic for mobile)
+    // Handle App Resume / Window Focus (Reward logic for both mobile and web)
     useEffect(() => {
-        let listener: any = null;
-        const setupListener = async () => {
-            const isNative = (window as any).Capacitor?.isNativePlatform();
-            if (!isNative) return;
-            listener = await App.addListener('appStateChange', async ({ isActive }) => {
-                if (isActive && gameStartTime) {
-                    const elapsed = Math.max(1, Math.floor((Date.now() - gameStartTime) / 60000));
-                    const reward = 0.05 + (elapsed * 0.02);
-                    setGameStartTime(null);
-                    await auth.addCash(reward);
-                    toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsed} min`, icon: '👑' });
-                }
-            });
+        const handleReturn = async () => {
+            if (gameStartTime) {
+                const now = Date.now();
+                const diffMs = now - gameStartTime;
+                const elapsedMinutes = Math.floor(diffMs / 60000);
+
+                // Minimum 1 minute reward, otherwise just the base $0.05
+                // Formula: $0.05 base + $0.02 per minute
+                const reward = 0.05 + (elapsedMinutes * 0.02);
+
+                setGameStartTime(null);
+                await auth.addCash(reward);
+
+                toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, {
+                    description: `You played for ${elapsedMinutes} minute${elapsedMinutes === 1 ? '' : 's'}.`,
+                    icon: '👑'
+                });
+            }
         };
-        if (auth.user) setupListener();
-        return () => { if (listener) listener.remove(); };
-    }, [gameStartTime, auth.user, auth.addCash]);
+
+        // For Native App
+        let appListener: any = null;
+        const setupNative = async () => {
+            if (Capacitor.isNativePlatform()) {
+                appListener = await App.addListener('appStateChange', ({ isActive }) => {
+                    if (isActive) handleReturn();
+                });
+            }
+        };
+        setupNative();
+
+        // For Web
+        const onFocus = () => handleReturn();
+        window.addEventListener('focus', onFocus);
+
+        return () => {
+            if (appListener) appListener.remove();
+            window.removeEventListener('focus', onFocus);
+        };
+    }, [gameStartTime, auth.addCash]);
 
     const openPortal = async (portalId: string, url: string) => {
         const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
         localStorage.setItem('empire_gold_history_v5', JSON.stringify(newHistory));
 
-        const isNative = (window as any).Capacitor?.isNativePlatform();
-        if (isNative) {
-            setGameStartTime(Date.now());
+        setGameStartTime(Date.now());
+
+        if (Capacitor.isNativePlatform()) {
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
             window.open(url, '_blank');
-            await auth.addCash(0.10);
-            toast.success("Arcade opened! +$0.10 awarded for testing.");
+            toast.info("Arcade opened in a new tab! Return here when finished to collect your rewards.");
         }
     }
 
