@@ -39,7 +39,7 @@ function AppBackground() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <img
-            src="/bg-gold.jpg"
+            src="/bg-gold.png"
             className="w-full h-full object-cover opacity-30 animate-in fade-in duration-1000"
             alt=""
         />
