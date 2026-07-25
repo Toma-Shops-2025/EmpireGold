@@ -14,7 +14,21 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-// THE EMPIRE GOLD CATALOG - FIXED IMAGES
+const REWARDS = [
+    { id: 'v5', name: '$5 Visa Card', cost: 5.00, type: 'Visa' },
+    { id: 'a5', name: '$5 Amazon Gift', cost: 5.00, type: 'Amazon' },
+    { id: 'p5', name: '$5 PayPal Cash', cost: 5.00, type: 'PayPal' },
+    { id: 'v10', name: '$10 Visa Card', cost: 10.00, type: 'Visa' },
+    { id: 'a10', name: '$10 Amazon Gift', cost: 10.00, type: 'Amazon' },
+    { id: 'p10', name: '$10 PayPal Cash', cost: 10.00, type: 'PayPal' },
+    { id: 'v25', name: '$25 Visa Card', cost: 25.00, type: 'Visa' },
+    { id: 'a25', name: '$25 Amazon Gift', cost: 25.00, type: 'Amazon' },
+    { id: 'p25', name: '$25 PayPal Cash', cost: 25.00, type: 'PayPal' },
+    { id: 'v50', name: '$50 Visa Card', cost: 50.00, type: 'Visa' },
+    { id: 'a50', name: '$50 Amazon Gift', cost: 50.00, type: 'Amazon' },
+    { id: 'p50', name: '$50 PayPal Cash', cost: 50.00, type: 'PayPal' },
+];
+
 const GAME_CATALOG = [
     { id: 'g1', name: 'Subway Surfers', category: 'Action', url: 'https://poki.com/en/g/subway-surfers', img: 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=400&q=80', reward: 1.20 },
     { id: 'g2', name: 'Temple Run 2', category: 'Running', url: 'https://poki.com/en/g/temple-run-2', img: 'https://images.unsplash.com/photo-1632516643720-e7f5d7d6ecc9?w=400&q=80', reward: 0.80 },
@@ -26,25 +40,16 @@ const GAME_CATALOG = [
     { id: 'g8', name: 'Bubble Shooter', category: 'Puzzle', url: 'https://poki.com/en/g/bubble-shooter', img: 'https://images.unsplash.com/photo-1553481199-6565a5bbdd1f?w=400&q=80', reward: 3.00 },
 ];
 
-const REWARDS = [
-    { id: 'v5', name: '$5 Visa Card', cost: 5.00, type: 'Visa' },
-    { id: 'a5', name: '$5 Amazon Gift', cost: 5.00, type: 'Amazon' },
-    { id: 'p5', name: '$5 PayPal Cash', cost: 5.00, type: 'PayPal' },
-    { id: 'v10', name: '$10 Visa Card', cost: 10.00, type: 'Visa' },
-    { id: 'a10', name: '$10 Amazon Gift', cost: 10.00, type: 'Amazon' },
-    { id: 'p10', name: '$10 PayPal Cash', cost: 10.00, type: 'PayPal' },
-];
-
 function AppBackground() {
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
+    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        {/* Bright Vibrant Background - No curtain */}
         <img
             src="/bg-gold.png"
-            className="w-full h-full object-cover opacity-40 animate-in fade-in duration-1000 scale-105"
+            className="w-full h-full object-cover opacity-80"
             alt=""
         />
-        <div className="absolute inset-0 bg-black/40" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
+        <div className="absolute inset-0 bg-black/10" />
     </div>
   )
 }
@@ -78,27 +83,16 @@ export default function EmpireGoldHub() {
         }
     }, [auth.user]);
 
-    // REAL-TIME ACCUMULATION LISTENER
     useEffect(() => {
         const handler = App.addListener('appStateChange', async ({ isActive }) => {
             if (isActive && gameStartTime) {
                 const now = Date.now();
                 const elapsedMs = now - gameStartTime;
                 const minutes = Math.floor(elapsedMs / 60000) || 1;
-
-                // Reward: $0.05 base + $0.02 per minute
                 const totalReward = 0.05 + (minutes * 0.02);
                 setGameStartTime(null);
-
-                // FORCE THE REWARD
                 await auth.addCash(totalReward);
-
-                toast.success(`Royal Rewards! +$${totalReward.toFixed(2)}`, {
-                    description: `You played for ${minutes} minute(s). Vault updated.`,
-                    icon: '👑'
-                });
-
-                // POST-SESSION AD
+                toast.success(`Royal Rewards! +$${totalReward.toFixed(2)}`, { icon: '👑' });
                 const isNative = (window as any).Capacitor?.isNativePlatform();
                 if (isNative) {
                     try {
@@ -127,19 +121,11 @@ export default function EmpireGoldHub() {
         }
     }
 
-    const handleAuth = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!isLogin && !agreed) return toast.error("Please agree to terms.");
-        try {
-            if (isLogin) await auth.signIn(email, password);
-            else await auth.signUp(email, password, username);
-        } catch (err: any) { toast.error(err.message); }
-    }
-
     if (auth.loading || isAdLoading) return (
-        <div className="h-screen w-full bg-black flex flex-col items-center justify-center text-white p-8">
-            <Loader2 className="animate-spin h-12 w-12 mb-6 text-yellow-400" />
-            <span className="text-xs font-black uppercase tracking-[0.4em] animate-pulse">Accessing Empire Vault...</span>
+        <div className="h-screen w-full bg-[#5b21b6] flex flex-col items-center justify-center text-white p-8">
+            <AppBackground />
+            <Loader2 className="animate-spin h-12 w-12 mb-6 text-yellow-400 relative z-10" />
+            <span className="text-xs font-black uppercase tracking-[0.4em] animate-pulse">Entering Vault...</span>
         </div>
     );
 
@@ -148,51 +134,43 @@ export default function EmpireGoldHub() {
             <div className="h-[100dvh] w-full flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar">
                 <AppBackground />
                 <img src="/logo.png" className="w-40 h-40 mb-6 drop-shadow-glow relative z-10" alt="Logo" />
-                <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
+                <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10 drop-shadow-2xl">
                     Empire<br/><span className="text-yellow-400 font-serif">Gold</span>
                 </h1>
-                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-8 pb-20 text-left">
-                    {!isLogin && (
-                        <div className="bg-white/10 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
-                            <UserIcon className="h-5 w-5 text-white/40 mr-3" />
-                            <input type="text" placeholder="Username" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={username} onChange={e => setUsername(e.target.value)} required />
-                        </div>
-                    )}
-                    <div className="bg-white/10 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
+
+                <form onSubmit={(e) => { e.preventDefault(); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-8 pb-20">
+                    <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Mail className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="email" placeholder="Email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="email" placeholder="Email" className="bg-transparent outline-none w-full font-bold text-white" value={email} onChange={e => setEmail(e.target.value)} required />
                     </div>
-                    <div className="bg-white/10 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
+                    <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white" value={password} onChange={e => setPassword(e.target.value)} required />
                     </div>
-                    {!isLogin && (
-                        <div className="flex items-center gap-3 px-2 py-2">
-                            <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="accent-yellow-400" />
-                            <span className="text-[10px] text-white/40 font-bold uppercase">I agree to terms</span>
-                        </div>
-                    )}
                     <button type="submit" className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4">
                         {isLogin ? 'Enter Vault' : 'Claim Bonus'}
                     </button>
-                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-xs text-white/40 font-bold uppercase mt-6 underline tracking-widest relative z-10">
-                        {isLogin ? "Need membership? Sign Up" : "Back to Login"}
+                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-xs text-white/40 font-bold uppercase mt-6 underline relative z-10">
+                        {isLogin ? "Join Empire" : "Back to Login"}
                     </button>
                 </form>
             </div>
         )
     }
 
-    const cashBalance = parseFloat(auth.profile?.cash_balance?.toString() || "0");
-    const nextMilestone = REWARDS.find(r => cashBalance < r.cost)?.cost || 5.00;
-    const goalPct = Math.min(100, Math.max(0, Math.floor((cashBalance / nextMilestone) * 100))) || 0;
+    const rawBalance = auth.profile?.cash_balance || 0;
+    const cashBalance = typeof rawBalance === 'number' ? rawBalance : parseFloat(rawBalance) || 0;
+
+    // GLOBAL WEALTH PROGRESS (0 to $50)
+    const goalProgress = Math.min(100, Math.max(0, Math.floor((cashBalance / CONFIG.ULTIMATE_GOAL) * 100))) || 0;
 
     return (
-        <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative">
+        <div className="h-screen w-full flex flex-col overflow-hidden font-sans relative">
             <AppBackground />
 
+            {/* ROYAL HEADER */}
             <div className="pt-16 pb-12 px-6 rounded-b-[60px] shadow-2xl relative overflow-hidden glass-panel z-10">
-                <div className="flex justify-between items-start mb-10 relative z-10">
+                <div className="flex justify-between items-start mb-10 relative z-10 text-white">
                     <div className="space-y-1 text-left">
                         <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Empire Balance</span>
                         <div className="flex items-center gap-3">
@@ -204,17 +182,26 @@ export default function EmpireGoldHub() {
                     </div>
                 </div>
 
-                <div className="space-y-3 relative z-10 px-1">
+                {/* CONTINUOUS PROGRESS BAR */}
+                <div className="space-y-3 relative z-10 px-1 text-white">
                     <div className="flex justify-between text-[11px] font-black uppercase italic tracking-wider">
-                        <span>{goalPct >= 100 ? "Level Complete!" : "Accumulating..."}</span>
-                        <span className="text-yellow-400">{goalPct}%</span>
+                        <span>One step away!</span>
+                        <span className="text-yellow-400">{goalProgress}% to $50.00</span>
                     </div>
-                    <div className="h-5 w-full bg-black/30 rounded-full overflow-hidden p-1 border border-white/5 shadow-inner">
-                        <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-glow transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
+                    <div className="h-5 w-full bg-black/40 rounded-full overflow-hidden p-1 border border-white/5 relative">
+                        {/* Milestone Markers */}
+                        {[5, 10, 25].map(m => (
+                            <div key={m} className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-20" style={{ left: `${(m/50)*100}%` }} />
+                        ))}
+                        <div
+                            className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.6)] transition-all duration-1000 ease-out z-10"
+                            style={{ width: `${goalProgress}%` }}
+                        />
                     </div>
                 </div>
             </div>
 
+            {/* ACTION LINKS */}
             <div className="grid grid-cols-2 gap-4 px-6 -translate-y-8 relative z-20">
                 <button onClick={() => setActiveTab('home')} className="bg-[#0ea5e9]/90 backdrop-blur-md p-5 rounded-3xl flex items-center justify-between shadow-xl active:scale-95 transition-all text-white border-b-8 border-black/10">
                     <TrendingUp className="h-5 w-5" />
@@ -222,7 +209,7 @@ export default function EmpireGoldHub() {
                 </button>
                 <button onClick={() => setActiveTab('payouts')} className="bg-[#ea580c]/90 backdrop-blur-md p-5 rounded-3xl flex items-center justify-between shadow-xl active:scale-95 transition-all text-white border-b-8 border-black/10">
                     <Wallet className="h-5 w-5" />
-                    <span className="font-black uppercase text-sm">Wealth</span>
+                    <span className="font-black uppercase text-sm">Vault</span>
                 </button>
             </div>
 
@@ -243,13 +230,13 @@ export default function EmpireGoldHub() {
                         </div>
 
                         <div className="space-y-4 pb-12 border-t border-white/5 pt-8">
-                            <div className="flex items-center gap-2 px-2">
-                                <LayoutGrid className="h-4 w-4 text-white/40" />
-                                <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 italic">Global Arcade</h4>
+                            <div className="flex items-center gap-2 px-2 text-white">
+                                <LayoutGrid className="h-4 w-4 opacity-40" />
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40 italic">Global Arcade</h4>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 {GAME_CATALOG.slice(4).map(game => (
-                                    <div key={game.id} onClick={() => openGame(game)} className="glass-card p-4 rounded-[35px] active:scale-95 transition-all text-center">
+                                    <div key={game.id} onClick={() => openGame(game)} className="glass-card p-4 rounded-[35px] active:scale-95 transition-all text-center text-white">
                                         <img src={game.img} className="w-full h-24 object-cover rounded-[24px] mb-3 shadow-lg" />
                                         <span className="block font-black text-[10px] uppercase truncate">{game.name}</span>
                                         <span className="block text-[8px] font-bold text-green-400 mt-1">${game.reward.toFixed(2)}</span>
@@ -262,7 +249,7 @@ export default function EmpireGoldHub() {
 
                 {activeTab === 'payouts' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300 px-2 pb-32">
-                        <div className="glass-panel p-8 rounded-[50px] shadow-2xl relative overflow-hidden">
+                        <div className="glass-panel p-8 rounded-[50px] shadow-2xl relative overflow-hidden text-white">
                              <div className="flex justify-between items-start mb-6">
                                 <Gift className="h-12 w-12 text-primary" />
                                 <div className="text-right">
@@ -270,22 +257,20 @@ export default function EmpireGoldHub() {
                                     <span className="text-2xl font-black italic text-white">${cashBalance.toFixed(2)}</span>
                                 </div>
                              </div>
-                             <h3 className="text-2xl font-black uppercase italic leading-none mb-2">Redemptions</h3>
-                             <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Withdraw wealth instantly via PayPal</p>
-                             <button className="w-full bg-white text-black font-black py-5 rounded-3xl uppercase tracking-widest text-xs mt-6 active:scale-95 transition-all shadow-glow" onClick={() => setActiveTab('home')}>Browse Arcade</button>
+                             <h3 className="text-2xl font-black uppercase italic leading-none mb-2">Jackpot Rewards</h3>
+                             <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Redeem wealth for gift cards</p>
+                             <button className="w-full bg-white text-black font-black py-5 rounded-3xl uppercase tracking-widest text-xs mt-6 active:scale-95 transition-all shadow-glow" onClick={() => setActiveTab('home')}>Earn More Gold</button>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                              <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-4 text-white">Available Prizes</h4>
                              {REWARDS.map(r => (
-                                 <RewardCard key={r.id} title={r.name} cost={`$${r.cost.toFixed(2)}`} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-blue-600" : "bg-blue-600"} locked={cashBalance < r.cost} />
+                                 <RewardCard key={r.id} title={r.name} cost={`$${r.cost.toFixed(2)}`} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} locked={cashBalance < r.cost} />
                              ))}
                         </div>
 
                         <div className="mt-8 flex flex-col items-center gap-4 text-center pb-20 relative z-10">
-                            <div className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em] text-white">Active Member</div>
-                            <span className="text-xl font-black italic border-b border-primary/20 pb-1 text-primary">{auth.profile?.username || 'Empire Member'}</span>
-                            <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
+                            <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Empire</button>
                         </div>
                     </div>
                 )}
