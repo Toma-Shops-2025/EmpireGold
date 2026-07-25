@@ -331,7 +331,7 @@ export default function EmpireGoldHub() {
                              </div>
                              <h3 className="text-2xl font-black uppercase italic leading-none mb-2 text-white">Jackpot Rewards</h3>
                              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-6 leading-tight italic underline decoration-yellow-400/20">Redeem points for real world money</p>
-                             <button className="w-full bg-white text-slate-900 font-black py-5 rounded-3xl uppercase tracking-widest text-xs active:scale-95 transition-transform relative z-[100]" onClick={() => setActiveTab('home')}>Browse Catalog</button>
+                             <button className="w-full bg-white text-slate-900 font-black py-5 rounded-3xl uppercase tracking-widest text-xs active:scale-95 transition-transform relative z-[100]" onClick={() => setActiveTab('games')}>Browse Arcade</button>
                         </div>
 
                         <div className="space-y-3">
