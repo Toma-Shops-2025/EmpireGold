@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { CONFIG } from '@/config'
 import { AdMob, BannerAdPosition, BannerAdSize } from '@capacitor-community/admob'
+import { Browser } from '@capacitor/browser'
 import {
     Wallet, Play, Gamepad2, Coins, TrendingUp, Trophy,
     Gift, ArrowRight, Loader2, Sparkles, Zap, Flame,
@@ -12,18 +13,16 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-// THE EMPIRE GOLD CATALOG
+// UPDATED CATALOG: High-Quality Royal Arcade Games
 const GAME_CATALOG = [
     { id: 'g1', name: 'Subway Surfers', category: 'Action', url: 'https://poki.com/en/g/subway-surfers', img: 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=400&q=80', reward: 1.20 },
     { id: 'g2', name: 'Temple Run 2', category: 'Running', url: 'https://poki.com/en/g/temple-run-2', img: 'https://images.unsplash.com/photo-1550745671-03d630974922?w=400&q=80', reward: 0.80 },
     { id: 'g3', name: 'Moto X3M', category: 'Racing', url: 'https://poki.com/en/g/moto-x3m', img: 'https://images.unsplash.com/photo-1558981403-c5f91cbba523?w=400&q=80', reward: 2.50 },
     { id: 'g4', name: 'Crossy Road', category: 'Arcade', url: 'https://poki.com/en/g/crossy-road', img: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&q=80', reward: 1.00 },
     { id: 'g5', name: 'Brain Test', category: 'Puzzle', url: 'https://poki.com/en/g/brain-test-tricky-puzzles', img: 'https://images.unsplash.com/photo-1518623489648-a173ef7824f3?w=400&q=80', reward: 5.00 },
-    { id: 'g6', name: 'Fruit Ninja', category: 'Skill', url: 'https://poki.com/en/g/fruit-ninja', img: 'https://images.unsplash.com/photo-1567531934444-bc4159c6ce81?w=400&q=80', reward: 1.50 },
+    { id: 'g6', name: 'Tunnel Rush', category: 'Skill', url: 'https://poki.com/en/g/tunnel-rush', img: 'https://images.unsplash.com/photo-1614680376593-902f74cf0d41?w=400&q=80', reward: 1.50 },
     { id: 'g7', name: 'Stickman Hook', category: 'Action', url: 'https://poki.com/en/g/stickman-hook', img: 'https://images.unsplash.com/photo-1614680376593-902f74cf0d41?w=400&q=80', reward: 0.75 },
     { id: 'g8', name: 'Bubble Shooter', category: 'Puzzle', url: 'https://poki.com/en/g/bubble-shooter', img: 'https://images.unsplash.com/photo-1553481199-6565a5bbdd1f?w=400&q=80', reward: 3.00 },
-    { id: 'g9', name: 'Jetpack Joyride', category: 'Action', url: 'https://poki.com/en/g/jetpack-joyride', img: 'https://images.unsplash.com/photo-1550745671-03d630974922?w=400&q=80', reward: 2.00 },
-    { id: 'g10', name: 'Vex 4', category: 'Platformer', url: 'https://poki.com/en/g/vex-4', img: 'https://images.unsplash.com/photo-1558981403-c5f91cbba523?w=400&q=80', reward: 1.80 },
 ];
 
 const REWARDS = [
@@ -52,7 +51,6 @@ function AppBackground() {
 export default function EmpireGoldHub() {
     const auth = useAuth()
     const [activeTab, setActiveTab] = useState<'home' | 'games' | 'payouts'>('home')
-    const [activeGame, setActiveGame] = useState<any>(null)
     const [isAdLoading, setIsAdLoading] = useState(false)
 
     // Auth UI States
@@ -81,29 +79,29 @@ export default function EmpireGoldHub() {
     const openGame = async (game: any) => {
         setIsAdLoading(true);
         const isNative = (window as any).Capacitor?.isNativePlatform();
-        if (isNative) {
-            try {
-                await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
-                await AdMob.showInterstitialAd();
-            } catch(e) {}
-        }
-        setIsAdLoading(false);
-        setActiveGame(game);
-    }
 
-    const closeGame = async () => {
-        const game = activeGame;
-        setActiveGame(null);
-        setIsAdLoading(true);
-        const isNative = (window as any).Capacitor?.isNativePlatform();
         if (isNative) {
             try {
+                // Show Ad before opening
                 await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
                 await AdMob.showInterstitialAd();
             } catch(e) {}
+
+            // Open Game in sleek in-app browser
+            await Browser.open({ url: game.url, toolbarColor: '#5b21b6' });
+
+            // Once they close the browser, reward them
+            setTimeout(() => {
+                auth.addCash(0.10);
+                toast.success(`Royal Session Complete! +$0.10`, { icon: '👑' });
+            }, 2000);
+        } else {
+            // Localhost fallback
+            window.open(game.url, '_blank');
+            auth.addCash(0.10);
+            toast.success(`Simulated Reward: +$0.10`);
         }
-        await auth.addCash(0.05);
-        toast.success(`${game?.name} progress saved! +$0.05`, { icon: '💰' });
+
         setIsAdLoading(false);
     }
 
@@ -134,7 +132,7 @@ export default function EmpireGoldHub() {
         <div className="h-screen w-full bg-[#5b21b6] flex flex-col items-center justify-center text-white p-8">
             <AppBackground />
             <Loader2 className="animate-spin h-16 w-16 mb-6 text-yellow-400 relative z-10" />
-            <span className="text-xs font-black uppercase tracking-[0.4em] animate-pulse text-center relative z-10">Entering Empire Vault...</span>
+            <span className="text-xs font-black uppercase tracking-[0.4em] animate-pulse text-center relative z-10">Syncing Empire Vault...</span>
         </div>
     );
 
@@ -182,7 +180,6 @@ export default function EmpireGoldHub() {
     const rawBalance = auth.profile?.cash_balance || 0;
     const cashBalance = typeof rawBalance === 'number' ? rawBalance : parseFloat(rawBalance) || 0;
 
-    // Progress relative to next available card (starting at $5.00)
     const nextMilestone = REWARDS.find(r => cashBalance < r.cost)?.cost || 50.00;
     const goalProgress = Math.min(100, Math.max(0, Math.floor((cashBalance / nextMilestone) * 100))) || 0;
 
@@ -204,7 +201,6 @@ export default function EmpireGoldHub() {
                     </div>
                 </div>
 
-                {/* HEATMAP PROGRESS */}
                 <div className="space-y-3 relative z-10 px-1">
                     <div className="flex justify-between text-[11px] font-black text-white uppercase italic tracking-wider">
                         <span>{goalProgress >= 100 ? "Reward Available!" : "One step away!"}</span>
@@ -241,27 +237,21 @@ export default function EmpireGoldHub() {
                 </button>
             </div>
 
-            {/* MAIN CONTENT AREA */}
             <div className="flex-1 overflow-y-auto px-6 pt-2 pb-32 no-scrollbar relative z-10">
 
                 {activeTab === 'home' && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
 
-                        {/* AD BOOST CARD */}
                         <div className="bg-gradient-to-r from-emerald-600 to-green-700 p-6 rounded-[35px] shadow-lg flex items-center justify-between active:scale-95 transition-all">
                             <div className="flex flex-col text-left">
                                 <span className="font-black text-white uppercase text-sm leading-none">Empire Boost</span>
                                 <span className="text-[10px] text-white/60 font-bold uppercase mt-1">Watch Ad for $0.50</span>
                             </div>
-                            <button
-                                onClick={handleEmpireBoost}
-                                className="bg-white text-emerald-700 p-4 rounded-2xl shadow-xl"
-                            >
+                            <button onClick={handleEmpireBoost} className="bg-white text-emerald-700 p-4 rounded-2xl shadow-xl">
                                 <Zap className="h-6 w-6 fill-current" />
                             </button>
                         </div>
 
-                        {/* ROYAL QUESTS */}
                         <div className="space-y-4">
                             <div className="flex items-center gap-2 px-2 text-white">
                                 <Trophy className="h-4 w-4 text-yellow-400 fill-current" />
@@ -281,7 +271,6 @@ export default function EmpireGoldHub() {
                             </div>
                         </div>
 
-                        {/* GLOBAL LIBRARY */}
                         <div className="space-y-4 pb-12 border-t border-white/5 pt-8">
                             <div className="flex items-center gap-2 px-2 text-white">
                                 <LayoutGrid className="h-4 w-4 opacity-40" />
@@ -300,23 +289,6 @@ export default function EmpireGoldHub() {
                     </div>
                 )}
 
-                {activeTab === 'games' && (
-                    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                         <h2 className="text-4xl font-black italic uppercase text-center mt-4 text-white">Empire <span className="text-primary">Arcade</span></h2>
-                         <div className="grid grid-cols-2 gap-4 pb-32">
-                            {GAME_CATALOG.map(game => (
-                                <div key={game.id} onClick={() => openGame(game)} className="glass-card p-2 rounded-[35px] active:scale-95 transition-all relative overflow-hidden">
-                                    <img src={game.img} className="w-full h-40 object-cover rounded-[30px]" />
-                                    <div className="absolute bottom-2 left-2 right-2 bg-black/60 backdrop-blur-md p-3 rounded-2xl">
-                                        <span className="block text-[10px] font-black text-white uppercase truncate">{game.name}</span>
-                                        <span className="block text-[8px] font-bold text-yellow-400 mt-0.5">${game.reward.toFixed(2)} Goal</span>
-                                    </div>
-                                </div>
-                            ))}
-                         </div>
-                    </div>
-                )}
-
                 {activeTab === 'payouts' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300 px-2 pb-32">
                         <h2 className="text-4xl font-black italic uppercase text-center mt-4 text-white">Empire <span className="text-primary">Vault</span></h2>
@@ -331,7 +303,7 @@ export default function EmpireGoldHub() {
                              </div>
                              <h3 className="text-2xl font-black uppercase italic leading-none mb-2 text-white">Jackpot Rewards</h3>
                              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-6 leading-tight italic underline decoration-yellow-400/20">Redeem points for real world money</p>
-                             <button className="w-full bg-white text-slate-900 font-black py-5 rounded-3xl uppercase tracking-widest text-xs active:scale-95 transition-transform relative z-[100]" onClick={() => setActiveTab('games')}>Browse Arcade</button>
+                             <button className="w-full bg-white text-slate-900 font-black py-5 rounded-3xl uppercase tracking-widest text-xs active:scale-95 transition-transform relative z-[100]" onClick={() => setActiveTab('home')}>Browse Arcade</button>
                         </div>
 
                         <div className="space-y-3">
@@ -340,45 +312,14 @@ export default function EmpireGoldHub() {
                                  <RewardCard key={r.id} title={r.name} cost={`$${r.cost.toFixed(2)}`} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} locked={cashBalance < r.cost} />
                              ))}
                         </div>
-
-                        <div className="mt-8 flex flex-col items-center gap-4 text-center pb-20 relative z-10">
-                            <div className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em] text-white">Active Player</div>
-                            <span className="text-xl font-black italic border-b border-primary/20 pb-1 text-primary">{auth.profile?.username || 'Empire Member'}</span>
-                            <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
-                        </div>
                     </div>
                 )}
             </div>
 
-            {/* GAME PLAYER */}
-            {activeGame && (
-                <div className="fixed inset-0 z-[10000] bg-black animate-in fade-in duration-300 flex flex-col">
-                    <div className="h-20 bg-slate-900 flex items-center justify-between px-6 border-b border-white/10">
-                        <div className="flex items-center gap-3 text-left">
-                            <div className="bg-primary/20 p-2 rounded-lg">
-                                <Gamepad2 className="h-5 w-5 text-primary" />
-                            </div>
-                            <div>
-                                <span className="block text-xs font-black text-white uppercase">{activeGame.name}</span>
-                                <span className="block text-[9px] font-bold text-green-500 uppercase tracking-tighter">Empire Sync Active</span>
-                            </div>
-                        </div>
-                        <button onClick={closeGame} className="bg-white/10 p-3 rounded-full active:scale-90 transition-transform">
-                            <X className="h-6 w-6 text-white" />
-                        </button>
-                    </div>
-                    <iframe
-                        src={activeGame.url}
-                        className="flex-1 w-full border-none"
-                        allow="autoplay; gamepad; fullscreen"
-                    />
-                </div>
-            )}
-
             {/* BOTTOM NAVIGATION */}
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-white/95 backdrop-blur-3xl border-t border-slate-200 flex justify-around items-center px-4 pb-4 z-[5000] shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                 <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                <NavButton icon={Gamepad2} label="Arcade" active={activeTab === 'games'} onClick={() => setActiveTab('games')} />
+                <NavButton icon={Gamepad2} label="Arcade" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
                 <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => setActiveTab('payouts')} />
             </nav>
         </div>
