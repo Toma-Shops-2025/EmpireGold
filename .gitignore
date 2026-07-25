@@ -17,10 +17,13 @@ dist
 # Android
 android/app/build
 android/.gradle
+android/.gradle_home
 android/local.properties
 android/captures
 android/*.iml
 .idea
+gradle_cache
+.gradle_home
 
 # IDEs
 .vscode
