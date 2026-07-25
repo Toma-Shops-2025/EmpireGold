@@ -10,19 +10,7 @@ export function useAuth() {
   const fetchProfile = useCallback(async (userId: string) => {
     try {
         const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-        if (data) {
-            setProfile(data);
-        } else {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                const { data: newP } = await supabase.from('profiles').upsert({
-                    id: userId,
-                    cash_balance: 0.00,
-                    total_earned: 0.00
-                }).select().single();
-                if (newP) setProfile(newP);
-            }
-        }
+        if (data) setProfile(data);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
@@ -50,29 +38,16 @@ export function useAuth() {
     if (!user) return;
     const val = parseFloat(amount.toFixed(2));
 
-    // 1. Try the Database Function (Fastest/Safest)
+    // ATOMIC ADDITION: Tell the database to add the money.
     const { data: newBalance, error } = await supabase.rpc('increment_cash_balance', {
         user_id: user.id,
         amount: val
     });
 
-    if (error) {
-        console.warn("RPC failed, falling back to manual update", error);
-        // 2. Fallback: Manual Math (Guaranteed to work)
-        const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', user.id).single();
-        const updatedBal = (parseFloat(current?.cash_balance || 0) + val).toFixed(2);
-        const updatedTotal = (parseFloat(current?.total_earned || 0) + val).toFixed(2);
-
-        await supabase.from('profiles').update({
-            cash_balance: updatedBal,
-            total_earned: updatedTotal
-        }).eq('id', user.id);
-
-        await fetchProfile(user.id);
-    } else {
-        // Update local UI immediately with the DB response
+    if (!error) {
         setProfile((prev: any) => ({ ...prev, cash_balance: newBalance }));
-        await fetchProfile(user.id);
+    } else {
+        console.error("RPC failed", error);
     }
   };
 
