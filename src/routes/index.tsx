@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { CONFIG } from '@/config'
-import { AdMob, BannerAdPosition, BannerAdSize } from '@capacitor-community/admob'
+import { AdMob, BannerAdPosition, BannerAdSize, RewardAdPluginEvents, AdmobAdsConfigOpts } from '@capacitor-community/admob'
 import { Browser } from '@capacitor/browser'
 import { App } from '@capacitor/app'
 import {
@@ -52,6 +52,7 @@ export default function EmpireGoldHub() {
     const auth = useAuth()
     const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'mygames' | 'payouts'>('home')
     const [isAdLoading, setIsAdLoading] = useState(false)
+    const [sessionTotal, setSessionTotal] = useState(0);
     const [history, setHistory] = useState<Record<string, number>>(() => {
         const saved = localStorage.getItem('empire_gold_history_v5');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
@@ -70,7 +71,38 @@ export default function EmpireGoldHub() {
         return PROVIDERS.find(p => p.id === id);
     }, [history]);
 
-    const [sessionTotal, setSessionTotal] = useState(0);
+    // ADMOB INITIALIZATION
+    useEffect(() => {
+        if (!auth.user || !Capacitor.isNativePlatform()) return;
+
+        const initAds = async () => {
+            try {
+                await AdMob.initialize();
+
+                // Add Listener for Reward
+                AdMob.addListener(RewardAdPluginEvents.Rewarded, async () => {
+                    await auth.addCash(0.10);
+                    toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
+                    setIsAdLoading(false);
+                });
+
+                AdMob.addListener(RewardAdPluginEvents.FailedToLoad, (err) => {
+                    console.error("Ad failed to load", err);
+                    setIsAdLoading(false);
+                    toast.error("Ad Unavailable", { description: "Try again in a moment." });
+                });
+
+                AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
+                    setIsAdLoading(false);
+                });
+
+            } catch (e) {
+                console.error("AdMob Init Error", e);
+            }
+        };
+
+        initAds();
+    }, [auth.user]);
 
     // CHECK FOR PENDING REWARDS
     const checkRewards = useCallback(async () => {
@@ -80,7 +112,6 @@ export default function EmpireGoldHub() {
             const now = Date.now();
             const elapsedMinutes = Math.floor((now - start) / 60000);
 
-            // Formula: $0.05 base + $0.02 per minute
             const reward = 0.05 + (elapsedMinutes * 0.02);
 
             localStorage.removeItem('empire_gold_session_start');
@@ -97,31 +128,10 @@ export default function EmpireGoldHub() {
     // Monitor for return to app
     useEffect(() => {
         if (!auth.user) return;
-
-        // Check immediately on mount/auth
         checkRewards();
-
-        // Listen for visibility changes (switching back to tab)
-        const onVisibilityChange = () => {
-            if (document.visibilityState === 'visible') checkRewards();
-        };
-
-        // Listen for App Resume (Native)
-        let appListener: any = null;
-        if (Capacitor.isNativePlatform()) {
-            App.addListener('appStateChange', ({ isActive }) => {
-                if (isActive) checkRewards();
-            }).then(l => appListener = l);
-        }
-
-        document.addEventListener('visibilitychange', onVisibilityChange);
+        const onVisibilityChange = () => { if (document.visibilityState === 'visible') checkRewards(); };
         window.addEventListener('focus', onVisibilityChange);
-
-        return () => {
-            document.removeEventListener('visibilitychange', onVisibilityChange);
-            window.removeEventListener('focus', onVisibilityChange);
-            if (appListener) appListener.remove();
-        };
+        return () => window.removeEventListener('focus', onVisibilityChange);
     }, [auth.user, checkRewards]);
 
     const openPortal = async (portalId: string, url: string) => {
@@ -139,19 +149,29 @@ export default function EmpireGoldHub() {
     }
 
     const handleAdWatch = async () => {
+        if (isAdLoading) return;
         setIsAdLoading(true);
+
         if (Capacitor.isNativePlatform()) {
             try {
-                await AdMob.prepareRewardVideoAd({ adId: CONFIG.ADMOB_REWARDED_ID });
+                await AdMob.prepareRewardVideoAd({
+                    adId: CONFIG.ADMOB_REWARDED_ID,
+                    isTesting: CONFIG.IS_TESTING
+                });
                 await AdMob.showRewardVideoAd();
-                await auth.addCash(0.10);
-                toast.success("Reward Earned! +$0.10");
-            } catch(e) { toast.error("Ad not available yet."); }
+            } catch(e) {
+                setIsAdLoading(false);
+                toast.error("Ad failed to load.");
+            }
         } else {
-            await auth.addCash(0.10);
-            toast.success("Simulated Reward: +$0.10");
+            // WEB SIMULATION
+            setTimeout(async () => {
+                await auth.addCash(0.10);
+                setSessionTotal(prev => prev + 0.10);
+                toast.success("Simulated Reward: +$0.10");
+                setIsAdLoading(false);
+            }, 1000);
         }
-        setIsAdLoading(false);
     }
 
     if (auth.loading) return (
@@ -164,12 +184,12 @@ export default function EmpireGoldHub() {
 
     if (!auth.user) {
         return (
-            <div className="h-[100dvh] w-full flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar">
+            <div className="h-[100dvh] w-full flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar text-left">
                 <AppBackground />
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
                     Empire<br/><span className="text-yellow-400 font-serif">Gold</span>
                 </h1>
-                <form onSubmit={(e) => { e.preventDefault(); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20 text-left">
+                <form onSubmit={(e) => { e.preventDefault(); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
                     {!isLogin && (
                         <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
@@ -213,7 +233,7 @@ export default function EmpireGoldHub() {
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-5xl font-black italic tracking-tighter">${cashBalance.toFixed(2)}</span>
-                                {sessionTotal > 0 && <span className="text-xs text-green-400 font-bold">Session Earned: +${sessionTotal.toFixed(2)}</span>}
+                                {sessionTotal > 0 && <span className="text-[10px] text-green-400 font-bold uppercase">Session: +${sessionTotal.toFixed(2)}</span>}
                             </div>
                         </div>
                     </div>
@@ -269,7 +289,7 @@ export default function EmpireGoldHub() {
                         )}
 
                         <DashButton icon={Layers} label="All Portals" color="bg-blue-600" onClick={() => setActiveTab('portals')} />
-                        <DashButton icon={History} label="My History" color="bg-purple-600" onClick={() => setActiveTab('mygames')} />
+                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => setActiveTab('mygames')} />
                         <DashButton icon={Award} label="Vault Wins" color="bg-orange-600" onClick={() => setActiveTab('payouts')} />
 
                         <button onClick={handleAdWatch} disabled={isAdLoading} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50">
@@ -350,7 +370,7 @@ export default function EmpireGoldHub() {
                             <span className="text-xl italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || auth.user?.email.split('@')[0] || 'Empire Member'}</span>
                             <div className="flex flex-col gap-1 mt-2 opacity-60 text-[10px] font-mono lowercase bg-black/40 p-2 rounded-lg border border-white/10">
                                 <span>{auth.user?.email}</span>
-                                <span className="tracking-tighter text-yellow-400">UID: {auth.user?.id}</span>
+                                <span className="tracking-tighter text-yellow-400 font-bold">UID: {auth.user?.id}</span>
                             </div>
                             <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
                         </div>
@@ -403,9 +423,9 @@ function RewardCard({ title, cost, balance, icon: Icon, color }: any) {
 
 function NavButton({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
     return (
-      <button onClick={onClick} className={cn("flex flex-col items-center justify-center gap-1 w-20 py-2 transition-all active:scale-90", active ? "text-yellow-400 scale-110" : "text-white/40")}>
+      <button onClick={onClick} className={cn("flex flex-col items-center justify-center gap-1 w-20 py-2 transition-all active:scale-90", active ? "text-yellow-400 scale-110 font-black" : "text-white/40")}>
         <Icon className={cn("h-6 w-6", active && "fill-current")} />
-        <span className={cn("text-[8px] font-black uppercase tracking-widest", active ? "opacity-100" : "opacity-40")}>{label}</span>
+        <span className={cn("text-[10px] font-black uppercase tracking-widest", active ? "opacity-100" : "opacity-40")}>{label}</span>
       </button>
     );
 }
