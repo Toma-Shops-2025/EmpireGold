@@ -1,23 +1,12 @@
-# Empire Gold - Ultra Stable Build Script (Direct Path Edition)
+# Empire Gold - Production Build Script
 $ProjectPath  = "$env:USERPROFILE\Desktop\money-cash"
 $KeystorePath = "C:\Keys\money-cash.jks"
 $KeyAlias     = "alias"
 $ApkPath      = "$ProjectPath\android\app\build\outputs\apk\release\app-release.apk"
 $Password     = "Custom.247"
 
-# Move the cache to a very short path to avoid Windows path limits
-$env:GRADLE_USER_HOME = "C:\gradle_cache"
-
 $ErrorActionPreference = "Stop"
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
-
-Step "Ensuring Clean Cache Directory..."
-# COMPLETELY WIPE THE CACHE to ensure no corrupted files
-if (Test-Path "C:\gradle_cache") {
-    Write-Host "Wiping C:\gradle_cache..."
-    Remove-Item -Recurse -Force "C:\gradle_cache"
-}
-New-Item -ItemType Directory -Path "C:\gradle_cache" -Force
 
 Step "Force Stopping Gradle..."
 Set-Location "$ProjectPath\android"
@@ -33,11 +22,12 @@ npm run build
 Step "Syncing Capacitor..."
 npx cap sync android
 
-Step "Building Android APK (Direct Path Build)..."
+Step "Building Android APK..."
 Set-Location "$ProjectPath\android"
-# Added --refresh-dependencies, --no-daemon, and --no-build-cache for maximum stability
+
+# Running with standard settings but including the fix for VFS watch
 & .\gradlew.bat clean
-& .\gradlew.bat assembleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password" --no-daemon --refresh-dependencies --no-build-cache
+& .\gradlew.bat assembleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password" --no-daemon -Dorg.gradle.vfs.watch=false
 
 Set-Location $ProjectPath
 if (Test-Path $ApkPath) {

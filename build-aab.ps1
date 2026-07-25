@@ -8,8 +8,11 @@ $AabPath      = "$ProjectPath\android\app\build\outputs\bundle\release\app-relea
 $ErrorActionPreference = "Stop"
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 
-Step "Cleaning..."
-if (Test-Path $AabPath) { Remove-Item $AabPath -Force }
+Step "Force Stopping Gradle..."
+Set-Location "$ProjectPath\android"
+if (Test-Path ".\gradlew.bat") {
+    & .\gradlew.bat --stop
+}
 
 Step "Building Web App..."
 Set-Location $ProjectPath
@@ -32,9 +35,8 @@ if ($content -match 'versionCode\s+(\d+)') {
 
 Step "Building Android AAB..."
 Set-Location "$ProjectPath\android"
-& .\gradlew.bat --stop
 & .\gradlew.bat clean
-& .\gradlew.bat bundleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password"
+& .\gradlew.bat bundleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password" --no-daemon -Dorg.gradle.vfs.watch=false
 
 Set-Location $ProjectPath
 if (Test-Path $AabPath) {
