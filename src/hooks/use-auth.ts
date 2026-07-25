@@ -9,26 +9,24 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-        // 1. GENTLE FETCH: Just get the data. Do NOT upsert/reset here.
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
 
         if (data) {
             setProfile(data);
         } else {
-            // If the row is truly missing, create it ONLY if we are sure
-            console.log("Auth: Profile missing, checking session to create...");
+            console.log("Auth: Profile row missing, creating...");
             const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                const displayName = session.user.user_metadata?.username || 'Empire Member';
-                const { data: newP } = await supabase.from('profiles').insert({
-                    id: userId,
-                    username: displayName,
-                    display_name: displayName,
-                    cash_balance: 0.00,
-                    total_earned: 0.00
-                }).select().single();
-                if (newP) setProfile(newP);
-            }
+            const meta = session?.user?.user_metadata;
+            const displayName = meta?.username || meta?.display_name || 'Empire Member';
+
+            const { data: newP } = await supabase.from('profiles').upsert({
+                id: userId,
+                username: displayName,
+                display_name: displayName,
+                cash_balance: 0.00,
+                total_earned: 0.00
+            }).select().single();
+            if (newP) setProfile(newP);
         }
     } catch (e) {
         console.error("fetchProfile error", e);
@@ -74,7 +72,6 @@ export function useAuth() {
     });
     if (error) throw error;
     if (data.user) {
-        // Create initial profile record
         await supabase.from('profiles').insert({
             id: data.user.id,
             username,
@@ -89,32 +86,38 @@ export function useAuth() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-    const numericAmount = parseFloat(amount.toFixed(2));
+    // 1. UPDATE UI INSTANTLY (Optimistic UI)
+    setProfile((prev: any) => {
+        if (!prev) return prev;
+        const currentBal = parseFloat(prev.cash_balance?.toString() || "0");
+        const currentTotal = parseFloat(prev.total_earned?.toString() || "0");
+        return {
+            ...prev,
+            cash_balance: (currentBal + amount).toFixed(2),
+            total_earned: (currentTotal + (amount > 0 ? amount : 0)).toFixed(2)
+        };
+    });
 
-    // Try Atomic RPC First (Most reliable)
+    // 2. SAVE TO DATABASE
+    const numericAmount = parseFloat(amount.toFixed(2));
     const { error: rpcError } = await supabase.rpc('increment_cash_balance', {
         user_id: session.user.id,
         amount: numericAmount
     });
 
     if (rpcError) {
-        console.warn("RPC failed, using manual accumulation fallback", rpcError);
-        // Manual Fallback: We fetch the balance DIRECTLY before updating to prevent overwriting
+        console.warn("RPC failed, using manual patch", rpcError);
         const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', session.user.id).single();
-
-        const oldBalance = parseFloat(current?.cash_balance?.toString() || "0");
+        const oldBal = parseFloat(current?.cash_balance?.toString() || "0");
         const oldTotal = parseFloat(current?.total_earned?.toString() || "0");
 
-        const newBalance = parseFloat((oldBalance + numericAmount).toFixed(2));
-        const newTotal = parseFloat((oldTotal + (numericAmount > 0 ? numericAmount : 0)).toFixed(2));
-
         await supabase.from('profiles').update({
-            cash_balance: newBalance,
-            total_earned: newTotal
+            cash_balance: (oldBal + numericAmount).toFixed(2),
+            total_earned: (oldTotal + (numericAmount > 0 ? numericAmount : 0)).toFixed(2)
         }).eq('id', session.user.id);
     }
 
-    // Final sync to UI
+    // 3. FORCE SYNC (Final verify)
     await fetchProfile(session.user.id);
   }, [fetchProfile]);
 
