@@ -10,30 +10,14 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-        // Fetch using a simple select to be more resilient than .single()
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId);
-
-        if (error) {
-            console.error("Error fetching profile:", error);
-            return;
-        }
-
-        if (!data || data.length === 0) {
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        if (data) {
+            setProfile(data);
+        } else {
             const { data: { session } } = await supabase.auth.getSession();
             const username = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || 'Member';
-
-            const { data: newProfile, error: createError } = await supabase
-                .from('profiles')
-                .insert({ id: userId, username: username, cash_balance: 0 })
-                .select()
-                .single();
-
-            if (!createError) setProfile(newProfile);
-        } else {
-            setProfile(data[0]);
+            const { data: newP } = await supabase.from('profiles').insert({ id: userId, username: username, cash_balance: 0 }).select().single();
+            if (newP) setProfile(newP);
         }
     } catch (e) {
         console.error(e);
@@ -43,15 +27,12 @@ export function useAuth() {
   }, []);
 
   useEffect(() => {
-    // Initial Session Check
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
           setUser(session.user);
           fetchProfile(session.user.id);
       } else { setLoading(false); }
     });
-
-    // Auth Change Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
           setUser(session.user);
@@ -62,57 +43,44 @@ export function useAuth() {
           setLoading(false);
       }
     });
-
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
-
-  // REAL-TIME SUBSCRIPTION
-  // This makes the UI update INSTANTLY when the database changes
-  useEffect(() => {
-      if (!user) return;
-
-      const channel = supabase
-          .channel('schema-db-changes')
-          .on(
-              'postgres_changes',
-              { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
-              (payload) => {
-                  setProfile(payload.new);
-              }
-          )
-          .subscribe();
-
-      return () => { supabase.removeChannel(channel); };
-  }, [user]);
 
   const addCash = async (amount: number) => {
     if (!user) return;
     const val = parseFloat(amount.toFixed(2));
 
     try {
-        // Try the atomic RPC call
-        const { error: rpcError } = await supabase.rpc('increment_cash_balance', {
+        console.log(`Vault: Adding $${val}...`);
+
+        // 1. Try the RPC call
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('increment_cash_balance', {
             user_id: user.id,
             amount: val
         });
 
         if (rpcError) {
-            console.warn("RPC failed, attempting manual update fallback...");
+            console.warn("RPC failed, trying direct table update...", rpcError);
 
+            // 2. Fallback: Manual calculation and update
             const { data: current } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
-            const updatedBalance = parseFloat(((current?.cash_balance || 0) + val).toFixed(2));
+            const newTotal = parseFloat(((current?.cash_balance || 0) + val).toFixed(2));
 
-            await supabase
+            const { error: updateError } = await supabase
                 .from('profiles')
-                .update({ cash_balance: updatedBalance })
+                .update({ cash_balance: newTotal })
                 .eq('id', user.id);
+
+            if (updateError) throw updateError;
         }
 
-        // We don't need to manually refetch here because the Realtime listener above will catch it!
+        // 3. FORCE REFRESH: Pull the data immediately after saving
+        await fetchProfile(user.id);
+        console.log("Vault: Sync Complete.");
 
     } catch (e: any) {
-        console.error("Sync Error:", e);
-        toast.error("Vault Sync Error", { description: "Database rejected the save. Please check your connection." });
+        console.error("Vault Error:", e);
+        toast.error("Vault Sync Error", { description: e.message || "Database connection lost." });
     }
   };
 
