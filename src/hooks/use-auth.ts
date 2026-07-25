@@ -14,19 +14,7 @@ export function useAuth() {
         if (data) {
             setProfile(data);
         } else {
-            console.log("Auth: Profile row missing, creating...");
-            const { data: { session } } = await supabase.auth.getSession();
-            const meta = session?.user?.user_metadata;
-            const displayName = meta?.username || meta?.display_name || 'Empire Member';
-
-            const { data: newP } = await supabase.from('profiles').upsert({
-                id: userId,
-                username: displayName,
-                display_name: displayName,
-                cash_balance: 0.00,
-                total_earned: 0.00
-            }).select().single();
-            if (newP) setProfile(newP);
+            console.warn("Auth: Profile not found in DB.");
         }
     } catch (e) {
         console.error("fetchProfile error", e);
@@ -86,40 +74,38 @@ export function useAuth() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-    // 1. UPDATE UI INSTANTLY (Optimistic UI)
-    setProfile((prev: any) => {
-        if (!prev) return prev;
-        const currentBal = parseFloat(prev.cash_balance?.toString() || "0");
-        const currentTotal = parseFloat(prev.total_earned?.toString() || "0");
-        return {
-            ...prev,
-            cash_balance: (currentBal + amount).toFixed(2),
-            total_earned: (currentTotal + (amount > 0 ? amount : 0)).toFixed(2)
-        };
-    });
-
-    // 2. SAVE TO DATABASE
+    // 1. ATTEMPT DATABASE SAVE FIRST
     const numericAmount = parseFloat(amount.toFixed(2));
-    const { error: rpcError } = await supabase.rpc('increment_cash_balance', {
-        user_id: session.user.id,
-        amount: numericAmount
-    });
 
-    if (rpcError) {
-        console.warn("RPC failed, using manual patch", rpcError);
-        const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', session.user.id).single();
-        const oldBal = parseFloat(current?.cash_balance?.toString() || "0");
-        const oldTotal = parseFloat(current?.total_earned?.toString() || "0");
+    // We use a direct update for maximum reliability
+    const { data: current } = await supabase.from('profiles').select('cash_balance, total_earned').eq('id', session.user.id).single();
+    const oldBal = parseFloat(current?.cash_balance?.toString() || "0");
+    const oldTotal = parseFloat(current?.total_earned?.toString() || "0");
 
-        await supabase.from('profiles').update({
-            cash_balance: (oldBal + numericAmount).toFixed(2),
-            total_earned: (oldTotal + (numericAmount > 0 ? numericAmount : 0)).toFixed(2)
-        }).eq('id', session.user.id);
+    const newBal = parseFloat((oldBal + numericAmount).toFixed(2));
+    const newTotal = parseFloat((oldTotal + (numericAmount > 0 ? numericAmount : 0)).toFixed(2));
+
+    const { error: updateError } = await supabase.from('profiles').update({
+        cash_balance: newBal,
+        total_earned: newTotal
+    }).eq('id', session.user.id);
+
+    if (updateError) {
+        alert("Vault Sync Failed: " + updateError.message);
+        return;
     }
 
-    // 3. FORCE SYNC (Final verify)
-    await fetchProfile(session.user.id);
-  }, [fetchProfile]);
+    // 2. ONLY UPDATE UI IF DATABASE SUCCESS
+    setProfile((prev: any) => ({
+        ...prev,
+        cash_balance: newBal,
+        total_earned: newTotal
+    }));
+
+    // 3. Optional: Try RPC as backup for total earned syncing
+    await supabase.rpc('increment_cash_balance', { user_id: session.user.id, amount: numericAmount });
+
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
