@@ -1,21 +1,24 @@
-# Empire Gold - Ultra Stable Build Script
+# Empire Gold - Ultra Stable Build Script (Local Cache Edition)
 $ProjectPath  = "$env:USERPROFILE\Desktop\money-cash"
 $KeystorePath = "C:\Keys\money-cash.jks"
 $KeyAlias     = "alias"
 $ApkPath      = "$ProjectPath\android\app\build\outputs\apk\release\app-release.apk"
 $Password     = "Custom.247"
 
+# This bypasses the corrupted global cache by creating a local one
+$env:GRADLE_USER_HOME = "$ProjectPath\android\.gradle_home"
+
 $ErrorActionPreference = "Stop"
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 
-Step "Force Stopping Gradle & Cleaning Caches..."
+Step "Ensuring Local Build Environment..."
+if (!(Test-Path $env:GRADLE_USER_HOME)) { New-Item -ItemType Directory -Path $env:GRADLE_USER_HOME -Force }
+
+Step "Force Stopping Gradle..."
 Set-Location "$ProjectPath\android"
 if (Test-Path ".\gradlew.bat") {
     & .\gradlew.bat --stop
 }
-# Delete local gradle and build folders
-if (Test-Path "$ProjectPath\android\.gradle") { Remove-Item -Recurse -Force "$ProjectPath\android\.gradle" }
-if (Test-Path "$ProjectPath\android\app\build") { Remove-Item -Recurse -Force "$ProjectPath\android\app\build" }
 
 Step "Building Web App..."
 Set-Location $ProjectPath
@@ -25,7 +28,7 @@ npm run build
 Step "Syncing Capacitor..."
 npx cap sync android
 
-Step "Building Android APK (Release)..."
+Step "Building Android APK (Isolated Build)..."
 Set-Location "$ProjectPath\android"
 & .\gradlew.bat clean
 & .\gradlew.bat assembleRelease "-Pandroid.injected.signing.store.file=$KeystorePath" "-Pandroid.injected.signing.store.password=$Password" "-Pandroid.injected.signing.key.alias=$KeyAlias" "-Pandroid.injected.signing.key.password=$Password" --no-daemon
