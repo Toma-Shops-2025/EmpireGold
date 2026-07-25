@@ -14,10 +14,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-// THE EMPIRE GOLD CATALOG
+// THE EMPIRE GOLD CATALOG - FIXED IMAGES
 const GAME_CATALOG = [
     { id: 'g1', name: 'Subway Surfers', category: 'Action', url: 'https://poki.com/en/g/subway-surfers', img: 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=400&q=80', reward: 1.20 },
-    { id: 'g2', name: 'Temple Run 2', category: 'Running', url: 'https://poki.com/en/g/temple-run-2', img: 'https://images.unsplash.com/photo-1550745671-03d630974922?w=400&q=80', reward: 0.80 },
+    { id: 'g2', name: 'Temple Run 2', category: 'Running', url: 'https://poki.com/en/g/temple-run-2', img: 'https://images.unsplash.com/photo-1632516643720-e7f5d7d6ecc9?w=400&q=80', reward: 0.80 },
     { id: 'g3', name: 'Moto X3M', category: 'Racing', url: 'https://poki.com/en/g/moto-x3m', img: 'https://images.unsplash.com/photo-1558981403-c5f91cbba523?w=400&q=80', reward: 2.50 },
     { id: 'g4', name: 'Crossy Road', category: 'Arcade', url: 'https://poki.com/en/g/crossy-road', img: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&q=80', reward: 1.00 },
     { id: 'g5', name: 'Brain Test', category: 'Puzzle', url: 'https://poki.com/en/g/brain-test-tricky-puzzles', img: 'https://images.unsplash.com/photo-1518623489648-a173ef7824f3?w=400&q=80', reward: 5.00 },
@@ -40,7 +40,7 @@ function AppBackground() {
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
         <img
             src="/bg-gold.png"
-            className="w-full h-full object-cover opacity-40 animate-in fade-in duration-1000"
+            className="w-full h-full object-cover opacity-40 animate-in fade-in duration-1000 scale-105"
             alt=""
         />
         <div className="absolute inset-0 bg-black/40" />
@@ -78,30 +78,33 @@ export default function EmpireGoldHub() {
         }
     }, [auth.user]);
 
-    // Track Time and Reward when returning to App
+    // REAL-TIME ACCUMULATION LISTENER
     useEffect(() => {
-        const handler = App.addListener('appStateChange', ({ isActive }) => {
+        const handler = App.addListener('appStateChange', async ({ isActive }) => {
             if (isActive && gameStartTime) {
                 const now = Date.now();
                 const elapsedMs = now - gameStartTime;
-                const minutes = Math.floor(elapsedMs / 60000);
+                const minutes = Math.floor(elapsedMs / 60000) || 1;
 
                 // Reward: $0.05 base + $0.02 per minute
                 const totalReward = 0.05 + (minutes * 0.02);
-
-                auth.addCash(totalReward);
                 setGameStartTime(null);
 
+                // FORCE THE REWARD
+                await auth.addCash(totalReward);
+
                 toast.success(`Royal Rewards! +$${totalReward.toFixed(2)}`, {
-                    description: `You played for ${minutes} minutes.`,
+                    description: `You played for ${minutes} minute(s). Vault updated.`,
                     icon: '👑'
                 });
 
-                // Show Interstitial Ad upon return
+                // POST-SESSION AD
                 const isNative = (window as any).Capacitor?.isNativePlatform();
                 if (isNative) {
-                    AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID })
-                        .then(() => AdMob.showInterstitial());
+                    try {
+                        await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
+                        await AdMob.showInterstitial();
+                    } catch(e) {}
                 }
             }
         });
@@ -109,29 +112,19 @@ export default function EmpireGoldHub() {
     }, [gameStartTime, auth]);
 
     const openGame = async (game: any) => {
-        setIsAdLoading(true);
         const isNative = (window as any).Capacitor?.isNativePlatform();
-
         if (isNative) {
             try {
-                // Show Ad before opening
                 await AdMob.prepareInterstitialAd({ adId: CONFIG.ADMOB_INTERSTITIAL_ID });
                 await AdMob.showInterstitialAd();
             } catch(e) {}
-
-            // Record start time
             setGameStartTime(Date.now());
-
-            // Open Game in sleek in-app browser
             await Browser.open({ url: game.url, toolbarColor: '#5b21b6' });
         } else {
-            // Localhost fallback
             window.open(game.url, '_blank');
             setGameStartTime(Date.now());
-            toast.info("Browser opened. Time tracking active.");
+            toast.info("Browser opened. Accumulation active.");
         }
-
-        setIsAdLoading(false);
     }
 
     const handleAuth = async (e: React.FormEvent) => {
@@ -143,28 +136,10 @@ export default function EmpireGoldHub() {
         } catch (err: any) { toast.error(err.message); }
     }
 
-    const handleEmpireBoost = async () => {
-        setIsAdLoading(true);
-        const isNative = (window as any).Capacitor?.isNativePlatform();
-        if (isNative) {
-            try {
-                await AdMob.prepareRewardVideoAd({ adId: CONFIG.ADMOB_REWARDED_ID });
-                await AdMob.showRewardVideoAd();
-                await auth.addCash(0.50);
-                toast.success("Empire Boost Applied! +$0.50");
-            } catch(e) {}
-        } else {
-            await auth.addCash(0.50);
-            toast.success("Simulated Boost Applied! +$0.50");
-        }
-        setIsAdLoading(false);
-    }
-
     if (auth.loading || isAdLoading) return (
-        <div className="h-screen w-full bg-[#5b21b6] flex flex-col items-center justify-center text-white p-8">
-            <AppBackground />
-            <Loader2 className="animate-spin h-16 w-16 mb-6 text-yellow-400 relative z-10" />
-            <span className="text-xs font-black uppercase tracking-[0.4em] animate-pulse text-center relative z-10">Syncing Empire Vault...</span>
+        <div className="h-screen w-full bg-black flex flex-col items-center justify-center text-white p-8">
+            <Loader2 className="animate-spin h-12 w-12 mb-6 text-yellow-400" />
+            <span className="text-xs font-black uppercase tracking-[0.4em] animate-pulse">Accessing Empire Vault...</span>
         </div>
     );
 
@@ -176,8 +151,7 @@ export default function EmpireGoldHub() {
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
                     Empire<br/><span className="text-yellow-400 font-serif">Gold</span>
                 </h1>
-
-                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-8 pb-20">
+                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-8 pb-20 text-left">
                     {!isLogin && (
                         <div className="bg-white/10 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
@@ -195,77 +169,60 @@ export default function EmpireGoldHub() {
                     {!isLogin && (
                         <div className="flex items-center gap-3 px-2 py-2">
                             <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="accent-yellow-400" />
-                            <span className="text-[10px] text-white/40 font-bold uppercase">I agree to the Royal Terms</span>
+                            <span className="text-[10px] text-white/40 font-bold uppercase">I agree to terms</span>
                         </div>
                     )}
-                    <button type="submit" className="w-full bg-white text-[#4c1d95] py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4">
-                        {isLogin ? 'Enter Vault' : 'Join Empire'}
+                    <button type="submit" className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4">
+                        {isLogin ? 'Enter Vault' : 'Claim Bonus'}
                     </button>
                     <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-xs text-white/40 font-bold uppercase mt-6 underline tracking-widest relative z-10">
-                        {isLogin ? "Need a membership? Sign Up" : "Back to Login"}
+                        {isLogin ? "Need membership? Sign Up" : "Back to Login"}
                     </button>
                 </form>
             </div>
         )
     }
 
-    const rawBalance = auth.profile?.cash_balance || 0;
-    const cashBalance = typeof rawBalance === 'number' ? rawBalance : parseFloat(rawBalance) || 0;
-
-    const nextMilestone = REWARDS.find(r => cashBalance < r.cost)?.cost || 50.00;
-    const goalProgress = Math.min(100, Math.max(0, Math.floor((cashBalance / nextMilestone) * 100))) || 0;
+    const cashBalance = parseFloat(auth.profile?.cash_balance?.toString() || "0");
+    const nextMilestone = REWARDS.find(r => cashBalance < r.cost)?.cost || 5.00;
+    const goalPct = Math.min(100, Math.max(0, Math.floor((cashBalance / nextMilestone) * 100))) || 0;
 
     return (
-        <div className="h-screen w-full text-slate-900 flex flex-col overflow-hidden font-sans relative">
+        <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative">
             <AppBackground />
 
-            {/* ROYAL HEADER */}
             <div className="pt-16 pb-12 px-6 rounded-b-[60px] shadow-2xl relative overflow-hidden glass-panel z-10">
-                <div className="flex justify-between items-start mb-10 relative z-10 text-white">
+                <div className="flex justify-between items-start mb-10 relative z-10">
                     <div className="space-y-1 text-left">
                         <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Empire Balance</span>
                         <div className="flex items-center gap-3">
                             <div className="bg-yellow-400/20 p-2 rounded-xl border border-yellow-400/20">
                                 <Coins className="h-6 w-6 text-yellow-400 drop-shadow-glow" />
                             </div>
-                            <span className="text-5xl font-black text-white italic tracking-tighter animate-in fade-in zoom-in duration-700">${cashBalance.toFixed(2)}</span>
+                            <span className="text-5xl font-black italic tracking-tighter">${cashBalance.toFixed(2)}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="space-y-3 relative z-10 px-1 text-white">
+                <div className="space-y-3 relative z-10 px-1">
                     <div className="flex justify-between text-[11px] font-black uppercase italic tracking-wider">
-                        <span>{goalProgress >= 100 ? "Reward Available!" : "One step away!"}</span>
-                        <span className="text-yellow-400">{goalProgress}%</span>
+                        <span>{goalPct >= 100 ? "Level Complete!" : "Accumulating..."}</span>
+                        <span className="text-yellow-400">{goalPct}%</span>
                     </div>
                     <div className="h-5 w-full bg-black/30 rounded-full overflow-hidden p-1 border border-white/5 shadow-inner">
-                        <div
-                            className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-glow transition-all duration-1000 ease-out"
-                            style={{ width: `${goalProgress}%` }}
-                        />
+                        <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-glow transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
                     </div>
                 </div>
             </div>
 
-            {/* ACTION LINKS */}
             <div className="grid grid-cols-2 gap-4 px-6 -translate-y-8 relative z-20">
                 <button onClick={() => setActiveTab('home')} className="bg-[#0ea5e9]/90 backdrop-blur-md p-5 rounded-3xl flex items-center justify-between shadow-xl active:scale-95 transition-all text-white border-b-8 border-black/10">
-                    <div className="flex flex-col text-left">
-                        <span className="font-black uppercase text-[10px] opacity-60">Cash</span>
-                        <span className="font-black uppercase text-sm">Flow</span>
-                    </div>
-                    <div className="bg-white/20 p-2 rounded-lg">
-                        <TrendingUp className="h-4 w-4" />
-                    </div>
+                    <TrendingUp className="h-5 w-5" />
+                    <span className="font-black uppercase text-sm">Flow</span>
                 </button>
                 <button onClick={() => setActiveTab('payouts')} className="bg-[#ea580c]/90 backdrop-blur-md p-5 rounded-3xl flex items-center justify-between shadow-xl active:scale-95 transition-all text-white border-b-8 border-black/10">
-                    <div className="flex flex-col text-left">
-                        <span className="font-black uppercase text-[10px] opacity-60">Collect</span>
-                        <span className="font-black uppercase text-sm">Wealth</span>
-                    </div>
-                    <div className="bg-white/20 p-2 rounded-lg">
-                        <Wallet className="h-4 w-4" />
-                    </div>
+                    <Wallet className="h-5 w-5" />
+                    <span className="font-black uppercase text-sm">Wealth</span>
                 </button>
             </div>
 
@@ -273,17 +230,6 @@ export default function EmpireGoldHub() {
 
                 {activeTab === 'home' && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-
-                        <div className="bg-gradient-to-r from-emerald-600 to-green-700 p-6 rounded-[35px] shadow-lg flex items-center justify-between active:scale-95 transition-all">
-                            <div className="flex flex-col text-left">
-                                <span className="font-black text-white uppercase text-sm leading-none">Empire Boost</span>
-                                <span className="text-[10px] text-white/60 font-bold uppercase mt-1">Watch Ad for $0.50</span>
-                            </div>
-                            <button onClick={handleEmpireBoost} className="bg-white text-emerald-700 p-4 rounded-2xl shadow-xl">
-                                <Zap className="h-6 w-6 fill-current" />
-                            </button>
-                        </div>
-
                         <div className="space-y-4">
                             <div className="flex items-center gap-2 px-2 text-white">
                                 <Trophy className="h-4 w-4 text-yellow-400 fill-current" />
@@ -291,29 +237,22 @@ export default function EmpireGoldHub() {
                             </div>
                             <div className="grid grid-cols-1 gap-4">
                                 {GAME_CATALOG.slice(0, 4).map(game => (
-                                    <TaskCard
-                                        key={game.id}
-                                        title={game.name}
-                                        desc={game.category}
-                                        reward={`$${game.reward.toFixed(2)}`}
-                                        img={game.img}
-                                        onClick={() => openGame(game)}
-                                    />
+                                    <TaskCard key={game.id} title={game.name} desc={game.category} reward={`$${game.reward.toFixed(2)}`} img={game.img} onClick={() => openGame(game)} />
                                 ))}
                             </div>
                         </div>
 
                         <div className="space-y-4 pb-12 border-t border-white/5 pt-8">
-                            <div className="flex items-center gap-2 px-2 text-white">
-                                <LayoutGrid className="h-4 w-4 opacity-40" />
-                                <h4 className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40 italic">Global Library</h4>
+                            <div className="flex items-center gap-2 px-2">
+                                <LayoutGrid className="h-4 w-4 text-white/40" />
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 italic">Global Arcade</h4>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 {GAME_CATALOG.slice(4).map(game => (
-                                    <div key={game.id} onClick={() => openGame(game)} className="glass-card p-4 rounded-[35px] active:scale-95 transition-all text-center text-white">
-                                        <img src={game.img} className="w-full h-24 object-cover rounded-[24px] mb-3" />
+                                    <div key={game.id} onClick={() => openGame(game)} className="glass-card p-4 rounded-[35px] active:scale-95 transition-all text-center">
+                                        <img src={game.img} className="w-full h-24 object-cover rounded-[24px] mb-3 shadow-lg" />
                                         <span className="block font-black text-[10px] uppercase truncate">{game.name}</span>
-                                        <span className="block text-[8px] font-bold text-green-400 mt-1">${game.reward.toFixed(2)} Rewards</span>
+                                        <span className="block text-[8px] font-bold text-green-400 mt-1">${game.reward.toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -323,30 +262,28 @@ export default function EmpireGoldHub() {
 
                 {activeTab === 'payouts' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300 px-2 pb-32">
-                        <h2 className="text-4xl font-black italic uppercase text-center mt-4 text-white">Empire <span className="text-primary">Vault</span></h2>
-
                         <div className="glass-panel p-8 rounded-[50px] shadow-2xl relative overflow-hidden">
-                             <div className="flex justify-between items-start">
-                                <Gift className="h-12 w-12 text-primary mb-4" />
+                             <div className="flex justify-between items-start mb-6">
+                                <Gift className="h-12 w-12 text-primary" />
                                 <div className="text-right">
                                     <span className="block text-[8px] font-black text-white/40 uppercase">Vault Secure</span>
                                     <span className="text-2xl font-black italic text-white">${cashBalance.toFixed(2)}</span>
                                 </div>
                              </div>
-                             <h3 className="text-2xl font-black uppercase italic leading-none mb-2 text-white">Jackpot Rewards</h3>
-                             <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-6 leading-tight italic underline decoration-yellow-400/20">Redeem points for real world money</p>
-                             <button className="w-full bg-white text-slate-900 font-black py-5 rounded-3xl uppercase tracking-widest text-xs active:scale-95 transition-transform relative z-[100]" onClick={() => setActiveTab('home')}>Browse Arcade</button>
+                             <h3 className="text-2xl font-black uppercase italic leading-none mb-2">Redemptions</h3>
+                             <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Withdraw wealth instantly via PayPal</p>
+                             <button className="w-full bg-white text-black font-black py-5 rounded-3xl uppercase tracking-widest text-xs mt-6 active:scale-95 transition-all shadow-glow" onClick={() => setActiveTab('home')}>Browse Arcade</button>
                         </div>
 
                         <div className="space-y-3">
                              <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-4 text-white">Available Prizes</h4>
                              {REWARDS.map(r => (
-                                 <RewardCard key={r.id} title={r.name} cost={`$${r.cost.toFixed(2)}`} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} locked={cashBalance < r.cost} />
+                                 <RewardCard key={r.id} title={r.name} cost={`$${r.cost.toFixed(2)}`} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-blue-600" : "bg-blue-600"} locked={cashBalance < r.cost} />
                              ))}
                         </div>
 
                         <div className="mt-8 flex flex-col items-center gap-4 text-center pb-20 relative z-10">
-                            <div className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em] text-white">Empire Member</div>
+                            <div className="text-[10px] font-bold opacity-30 uppercase tracking-[0.2em] text-white">Active Member</div>
                             <span className="text-xl font-black italic border-b border-primary/20 pb-1 text-primary">{auth.profile?.username || 'Empire Member'}</span>
                             <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
                         </div>
@@ -354,10 +291,9 @@ export default function EmpireGoldHub() {
                 )}
             </div>
 
-            {/* BOTTOM NAVIGATION */}
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-white/95 backdrop-blur-3xl border-t border-slate-200 flex justify-around items-center px-4 pb-4 z-[5000] shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                 <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                <NavButton icon={Gamepad2} label="Arcade" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                <NavButton icon={Gamepad2} label="Arcade" active={false} onClick={() => setActiveTab('home')} />
                 <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => setActiveTab('payouts')} />
             </nav>
         </div>
