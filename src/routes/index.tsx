@@ -70,6 +70,8 @@ export default function EmpireGoldHub() {
         return PROVIDERS.find(p => p.id === id);
     }, [history]);
 
+    const [sessionTotal, setSessionTotal] = useState(0);
+
     // CHECK FOR PENDING REWARDS
     const checkRewards = useCallback(async () => {
         const startTime = localStorage.getItem('empire_gold_session_start');
@@ -82,6 +84,7 @@ export default function EmpireGoldHub() {
             const reward = 0.05 + (elapsedMinutes * 0.02);
 
             localStorage.removeItem('empire_gold_session_start');
+            setSessionTotal(prev => prev + reward);
             await auth.addCash(reward);
 
             toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, {
@@ -208,7 +211,10 @@ export default function EmpireGoldHub() {
                             <div className="bg-yellow-400/20 p-2 rounded-xl border border-yellow-400/10">
                                 <Coins className="h-6 w-6 text-yellow-400 drop-shadow-glow" />
                             </div>
-                            <span className="text-5xl font-black italic tracking-tighter">${cashBalance.toFixed(2)}</span>
+                            <div className="flex flex-col">
+                                <span className="text-5xl font-black italic tracking-tighter">${cashBalance.toFixed(2)}</span>
+                                {sessionTotal > 0 && <span className="text-xs text-green-400 font-bold">Session Earned: +${sessionTotal.toFixed(2)}</span>}
+                            </div>
                         </div>
                     </div>
                 </div>
