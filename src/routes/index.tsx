@@ -71,7 +71,7 @@ export default function EmpireGoldHub() {
         return PROVIDERS.find(p => p.id === id);
     }, [history]);
 
-    // ADMOB INITIALIZATION
+    // ADMOB CONTROLLER
     useEffect(() => {
         if (!auth.user || !Capacitor.isNativePlatform()) return;
 
@@ -79,30 +79,49 @@ export default function EmpireGoldHub() {
             try {
                 await AdMob.initialize();
 
-                // Add Listener for Reward
+                // Show Banner immediately
+                await AdMob.showBanner({
+                    adId: CONFIG.ADMOB_BANNER_ID,
+                    position: BannerAdPosition.BOTTOM_CENTER,
+                    size: BannerAdSize.ADAPTIVE_BANNER,
+                    isTesting: CONFIG.IS_TESTING,
+                    margin: 60 // Keep it above the bottom nav
+                });
+
+                // Prepare Interstitial (Full screen) for later use
+                await AdMob.prepareInterstitial({
+                    adId: CONFIG.ADMOB_INTERSTITIAL_ID,
+                    isTesting: CONFIG.IS_TESTING
+                });
+
+                // Listeners
                 AdMob.addListener(RewardAdPluginEvents.Rewarded, async () => {
                     await auth.addCash(0.10);
                     toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
                     setIsAdLoading(false);
                 });
 
-                AdMob.addListener(RewardAdPluginEvents.FailedToLoad, (err) => {
-                    console.error("Ad failed to load", err);
-                    setIsAdLoading(false);
-                    toast.error("Ad Unavailable", { description: "Try again in a moment." });
-                });
-
-                AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
-                    setIsAdLoading(false);
-                });
-
-            } catch (e) {
-                console.error("AdMob Init Error", e);
-            }
+            } catch (e) { console.error("AdMob Error", e); }
         };
 
         initAds();
     }, [auth.user]);
+
+    // SHOW INTERSTITIAL ON TRANSITIONS
+    const changeTab = async (tab: any) => {
+        setActiveTab(tab);
+        // 20% chance to show a full screen ad when switching tabs
+        if (Capacitor.isNativePlatform() && Math.random() > 0.8) {
+            try {
+                await AdMob.showInterstitial();
+                // Prepare next one
+                await AdMob.prepareInterstitial({
+                    adId: CONFIG.ADMOB_INTERSTITIAL_ID,
+                    isTesting: CONFIG.IS_TESTING
+                });
+            } catch(e) {}
+        }
+    }
 
     // CHECK FOR PENDING REWARDS
     const checkRewards = useCallback(async () => {
@@ -111,21 +130,14 @@ export default function EmpireGoldHub() {
             const start = parseInt(startTime);
             const now = Date.now();
             const elapsedMinutes = Math.floor((now - start) / 60000);
-
             const reward = 0.05 + (elapsedMinutes * 0.02);
-
             localStorage.removeItem('empire_gold_session_start');
             setSessionTotal(prev => prev + reward);
             await auth.addCash(reward);
-
-            toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, {
-                description: `Session: ${elapsedMinutes} min`,
-                icon: '👑'
-            });
+            toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsedMinutes} min`, icon: '👑' });
         }
     }, [auth]);
 
-    // Monitor for return to app
     useEffect(() => {
         if (!auth.user) return;
         checkRewards();
@@ -151,20 +163,12 @@ export default function EmpireGoldHub() {
     const handleAdWatch = async () => {
         if (isAdLoading) return;
         setIsAdLoading(true);
-
         if (Capacitor.isNativePlatform()) {
             try {
-                await AdMob.prepareRewardVideoAd({
-                    adId: CONFIG.ADMOB_REWARDED_ID,
-                    isTesting: CONFIG.IS_TESTING
-                });
+                await AdMob.prepareRewardVideoAd({ adId: CONFIG.ADMOB_REWARDED_ID, isTesting: CONFIG.IS_TESTING });
                 await AdMob.showRewardVideoAd();
-            } catch(e) {
-                setIsAdLoading(false);
-                toast.error("Ad failed to load.");
-            }
+            } catch(e) { setIsAdLoading(false); toast.error("Ad failed to load."); }
         } else {
-            // WEB SIMULATION
             setTimeout(async () => {
                 await auth.addCash(0.10);
                 setSessionTotal(prev => prev + 0.10);
@@ -222,7 +226,6 @@ export default function EmpireGoldHub() {
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
             <AppBackground />
 
-            {/* HEADER */}
             <div className="pt-16 pb-12 px-6 rounded-b-[60px] shadow-2xl relative overflow-hidden glass-panel z-10 border-b border-white/5">
                 <div className="flex justify-between items-start mb-10 relative z-10">
                     <div className="space-y-1 text-left">
@@ -239,7 +242,6 @@ export default function EmpireGoldHub() {
                     </div>
                 </div>
 
-                {/* LABELED PROGRESS BAR */}
                 <div className="space-y-4 relative z-10 px-1">
                     <div className="flex justify-between text-[11px] font-black uppercase italic tracking-wider text-left">
                         <span className="opacity-40">Milestone Progress</span>
@@ -249,7 +251,6 @@ export default function EmpireGoldHub() {
                         <div className="h-4 w-full bg-black/40 rounded-full overflow-hidden p-1 border border-white/5 shadow-inner">
                             <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.4)] transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
                         </div>
-                        {/* LABELS */}
                         <div className="absolute top-0 inset-x-0 flex justify-between px-2 text-[8px] font-black text-white/40 uppercase">
                             <span>$0</span>
                             <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$5</div>
@@ -261,23 +262,14 @@ export default function EmpireGoldHub() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 pt-8 pb-32 no-scrollbar relative z-10 text-left">
-
-                {/* DASHBOARD */}
+            <div className="flex-1 overflow-y-auto px-6 pt-8 pb-48 no-scrollbar relative z-10 text-left">
                 {activeTab === 'home' && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-500">
-
-                        {/* CONTINUE PLAYING WIDGET */}
                         {lastPlayed && (
-                            <button
-                                onClick={() => openPortal(lastPlayed.id, lastPlayed.url)}
-                                className="w-full bg-gradient-to-r from-yellow-400/20 to-transparent p-[1px] rounded-[35px] group"
-                            >
+                            <button onClick={() => openPortal(lastPlayed.id, lastPlayed.url)} className="w-full bg-gradient-to-r from-yellow-400/20 to-transparent p-[1px] rounded-[35px] group">
                                 <div className="bg-black/60 backdrop-blur-xl p-5 rounded-[34px] flex items-center justify-between border border-white/5 group-active:scale-95 transition-all">
                                     <div className="flex items-center gap-4">
-                                        <div className={cn("p-3 rounded-2xl text-white", lastPlayed.color)}>
-                                            <PlayCircle className="h-6 w-6" />
-                                        </div>
+                                        <div className={cn("p-3 rounded-2xl text-white", lastPlayed.color)}><PlayCircle className="h-6 w-6" /></div>
                                         <div className="flex flex-col text-left text-white">
                                             <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Continue Playing</span>
                                             <span className="text-sm font-black uppercase italic">{lastPlayed.name}</span>
@@ -287,16 +279,12 @@ export default function EmpireGoldHub() {
                                 </div>
                             </button>
                         )}
-
-                        <DashButton icon={Layers} label="All Portals" color="bg-blue-600" onClick={() => setActiveTab('portals')} />
-                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => setActiveTab('mygames')} />
-                        <DashButton icon={Award} label="Vault Wins" color="bg-orange-600" onClick={() => setActiveTab('payouts')} />
-
+                        <DashButton icon={Layers} label="All Portals" color="bg-blue-600" onClick={() => changeTab('portals')} />
+                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => changeTab('mygames')} />
+                        <DashButton icon={Award} label="Vault Wins" color="bg-orange-600" onClick={() => changeTab('payouts')} />
                         <button onClick={handleAdWatch} disabled={isAdLoading} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50">
                             <div className="flex items-center gap-6">
-                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">
-                                    {isAdLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}
-                                </div>
+                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">{isAdLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}</div>
                                 <div className="flex flex-col text-left">
                                     <span className="font-black text-white uppercase text-lg italic">{isAdLoading ? "Loading..." : "Watch Ad"}</span>
                                     <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-[0.2em]">Earn $0.10 Gold</span>
@@ -307,17 +295,12 @@ export default function EmpireGoldHub() {
                     </div>
                 )}
 
-                {/* PORTALS */}
                 {activeTab === 'portals' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300">
                          <h2 className="text-4xl font-black italic uppercase text-center mt-4">Elite <span className="text-yellow-400">Portals</span></h2>
                          <div className="grid grid-cols-2 gap-4">
                             {PROVIDERS.map(p => (
-                                <button
-                                    key={p.id}
-                                    onClick={() => openPortal(p.id, p.url)}
-                                    className={cn("p-6 h-48 rounded-[45px] text-left relative overflow-hidden active:scale-95 transition-all glass-card border border-white/10 shadow-2xl", p.color)}
-                                >
+                                <button key={p.id} onClick={() => openPortal(p.id, p.url)} className={cn("p-6 h-48 rounded-[45px] text-left relative overflow-hidden active:scale-95 transition-all glass-card border border-white/10 shadow-2xl", p.color)}>
                                     <div className="absolute top-0 right-0 p-4 opacity-10"><ExternalLink className="h-12 w-12" /></div>
                                     <span className="block font-black uppercase text-base italic leading-tight">{p.name}</span>
                                     <span className="block text-[8px] font-bold opacity-60 mt-1 uppercase tracking-tighter">Enter Arcade</span>
@@ -327,7 +310,6 @@ export default function EmpireGoldHub() {
                     </div>
                 )}
 
-                {/* HISTORY */}
                 {activeTab === 'mygames' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300">
                         <div className="flex items-center gap-2 px-2 text-white/60 mb-4">
@@ -356,7 +338,6 @@ export default function EmpireGoldHub() {
                     </div>
                 )}
 
-                {/* WINS */}
                 {activeTab === 'payouts' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300 px-2 pb-32">
                         <div className="space-y-4 mt-4">
@@ -378,11 +359,11 @@ export default function EmpireGoldHub() {
                 )}
             </div>
 
-            <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-4 z-[5000]">
-                <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                <NavButton icon={Layers} label="Portals" active={activeTab === 'portals'} onClick={() => setActiveTab('portals')} />
-                <NavButton icon={History} label="History" active={activeTab === 'mygames'} onClick={() => setActiveTab('mygames')} />
-                <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => setActiveTab('payouts')} />
+            <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-12 z-[5000]">
+                <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => changeTab('home')} />
+                <NavButton icon={Layers} label="Portals" active={activeTab === 'portals'} onClick={() => changeTab('portals')} />
+                <NavButton icon={History} label="History" active={activeTab === 'mygames'} onClick={() => changeTab('mygames')} />
+                <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => changeTab('payouts')} />
             </nav>
         </div>
     )
@@ -425,7 +406,7 @@ function NavButton({ icon: Icon, label, active, onClick }: { icon: any, label: s
     return (
       <button onClick={onClick} className={cn("flex flex-col items-center justify-center gap-1 w-20 py-2 transition-all active:scale-90", active ? "text-yellow-400 scale-110 font-black" : "text-white/40")}>
         <Icon className={cn("h-6 w-6", active && "fill-current")} />
-        <span className={cn("text-[10px] font-black uppercase tracking-widest", active ? "opacity-100" : "opacity-40")}>{label}</span>
+        <span className={cn("text-[8px] font-black uppercase tracking-widest", active ? "opacity-100" : "opacity-40")}>{label}</span>
       </button>
     );
 }
