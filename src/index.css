@@ -2,42 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  padding: 0;
-  background-color: #050515;
-  color: white;
-  overflow: hidden;
-  user-select: none;
+@layer base {
+  body {
+    @apply bg-[#02020a] text-white;
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
 }
 
 @layer utilities {
   .shadow-glow {
-    box-shadow: 0 0 20px rgba(255, 69, 0, 0.4), 0 0 40px rgba(255, 69, 0, 0.2);
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.4), 0 0 60px rgba(139, 92, 246, 0.1);
   }
 
-  .animate-float-slow {
-    animation: float 30s ease-in-out infinite;
+  .drop-shadow-glow {
+    filter: drop-shadow(0 0 20px rgba(250, 204, 21, 0.6));
   }
 
-  .shadow-x-glow {
-    text-shadow: 0 0 40px rgba(34, 211, 238, 0.4), 0 0 80px rgba(34, 211, 238, 0.2);
-    filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.3));
+  /* Frosty Glass Effect */
+  .glass-panel {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl;
+  }
+
+  .glass-card {
+    @apply bg-black/40 backdrop-blur-md border border-white/5 shadow-xl;
+  }
+
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600;
   }
 }
 
-@keyframes float {
-  0% { transform: translate(-5vw, -5vh) rotate(0deg); }
-  33% { transform: translate(5vw, 5vh) rotate(10deg); }
-  66% { transform: translate(-2vw, 10vh) rotate(-5deg); }
-  100% { transform: translate(-5vw, -5vh) rotate(0deg); }
-}
-
-@keyframes fall {
-  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-}
-
-.animate-fall {
-  animation: fall 3s linear forwards;
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 0px;
 }

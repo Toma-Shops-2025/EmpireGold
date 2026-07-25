@@ -11,5 +11,5 @@ export const CONFIG = {
     // GAME CONFIG
     COIN_TO_CASH_RATE: 0.0001, // 10,000 coins = $1.00
     DAILY_GOAL_COINS: 5000,
-    CASH_OUT_MIN: 50.00,
+    CASH_OUT_MIN: 5.00, // Reduced to match first card
 }

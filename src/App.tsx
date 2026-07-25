@@ -1,8 +1,13 @@
 import EmpireGoldHub from './routes/index'
+import { Toaster } from 'sonner'
 
 function App() {
+  console.log("App: Rendering Empire Gold Hub");
   return (
-    <EmpireGoldHub />
+    <>
+      <EmpireGoldHub />
+      <Toaster position="top-center" richColors />
+    </>
   )
 }
 
