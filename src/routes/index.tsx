@@ -348,9 +348,9 @@ export default function EmpireGoldHub() {
 
                         <div className="mt-12 flex flex-col items-center gap-4 text-center pb-20 relative z-10 text-white font-black uppercase">
                             <span className="text-xl italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || auth.user?.email.split('@')[0] || 'Empire Member'}</span>
-                            <div className="flex flex-col gap-1 mt-2 opacity-30 text-[8px] font-mono lowercase">
+                            <div className="flex flex-col gap-1 mt-2 opacity-60 text-[10px] font-mono lowercase bg-black/40 p-2 rounded-lg border border-white/10">
                                 <span>{auth.user?.email}</span>
-                                <span className="tracking-tighter">UID: {auth.user?.id}</span>
+                                <span className="tracking-tighter text-yellow-400">UID: {auth.user?.id}</span>
                             </div>
                             <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
                         </div>
