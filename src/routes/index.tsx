@@ -35,16 +35,16 @@ const REWARDS = [
 ];
 
 function AppBackground() {
-  // Generate a larger set of random positions for the floating money
+  // Generate a large set of random positions for the floating money
   const particles = useMemo(() => {
-    return Array.from({ length: 40 }).map((_, i) => ({
+    return Array.from({ length: 35 }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       top: `${Math.random() * 100}%`,
-      duration: 10 + Math.random() * 25, // 10-35 seconds
-      delay: Math.random() * -30, // Random start offset
-      size: 40 + Math.random() * 80, // 40-120px - MUCH LARGER
-      opacity: 0.05 + Math.random() * 0.15, // Low opacity for background feel
+      duration: 15 + Math.random() * 25,
+      delay: Math.random() * -40,
+      size: 80 + Math.random() * 100, // 80px to 180px - BIGGER
+      opacity: 0.15 + Math.random() * 0.25, // 0.15 to 0.4 - BRIGHTER
       rotate: Math.random() * 360,
     }));
   }, []);
@@ -59,7 +59,7 @@ function AppBackground() {
         />
 
         {/* Floating Particles Overlay */}
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 overflow-hidden">
             {particles.map((p) => (
                 <div
                     key={p.id}
@@ -74,22 +74,22 @@ function AppBackground() {
                 >
                     <DollarSign
                         size={p.size}
-                        className="text-yellow-500"
+                        className="text-yellow-500 drop-shadow-[0_0_15px_rgba(234,179,8,0.4)]"
                         style={{ transform: `rotate(${p.rotate}deg)` }}
                     />
                 </div>
             ))}
         </div>
 
-        <div className="absolute inset-0 bg-black/30" />
+        <div className="absolute inset-0 bg-black/20" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
 
         <style>{`
             @keyframes float-complex {
                 0% { transform: translate(0, 0) rotate(0deg); }
-                25% { transform: translate(30px, -60px) rotate(90deg); }
-                50% { transform: translate(-30px, -120px) rotate(180deg); }
-                75% { transform: translate(40px, -60px) rotate(270deg); }
+                25% { transform: translate(-40px, 40px) rotate(90deg); }
+                50% { transform: translate(40px, 80px) rotate(180deg); }
+                75% { transform: translate(-40px, 40px) rotate(270deg); }
                 100% { transform: translate(0, 0) rotate(360deg); }
             }
             .animate-float-complex {
@@ -133,7 +133,7 @@ export default function EmpireGoldHub() {
         bgmRef.current.volume = volume;
 
         if (hasInteracted) {
-            bgmRef.current.play().catch(e => console.log("Audio play blocked by browser:", e));
+            bgmRef.current.play().catch(e => console.log("Audio play blocked:", e));
         }
     }, [hasInteracted]);
 
@@ -151,18 +151,20 @@ export default function EmpireGoldHub() {
         }
     }, [activeTab, gameStartTime, auth.user, playTrack]);
 
-    // Handle first interaction to enable audio
     useEffect(() => {
         const handleFirstInteraction = () => {
             setHasInteracted(true);
             window.removeEventListener('touchstart', handleFirstInteraction);
             window.removeEventListener('mousedown', handleFirstInteraction);
+            window.removeEventListener('click', handleFirstInteraction);
         };
         window.addEventListener('touchstart', handleFirstInteraction);
         window.addEventListener('mousedown', handleFirstInteraction);
+        window.addEventListener('click', handleFirstInteraction);
         return () => {
             window.removeEventListener('touchstart', handleFirstInteraction);
             window.removeEventListener('mousedown', handleFirstInteraction);
+            window.removeEventListener('click', handleFirstInteraction);
         };
     }, []);
 
