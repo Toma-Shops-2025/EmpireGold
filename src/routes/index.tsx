@@ -90,10 +90,10 @@ export default function EmpireGoldHub() {
             // Stop music while playing games
             bgmRef.current.pause();
         } else if (activeTab === 'home') {
-            playTrack('/audio/promo.mp3', 0.1); // 50% lower than usual base
+            playTrack('/audio/promo.MP3', 0.1); // 50% lower than usual base
         } else if (activeTab === 'payouts') {
             // Play vault music (or promo if vault doesn't exist)
-            playTrack('/audio/vault.mp3', 0.15); // ~25% louder than home
+            playTrack('/audio/vault.MP3', 0.15); // ~25% louder than home
         } else {
             // Optional: Pause on other tabs or keep promo playing
             bgmRef.current.pause();
