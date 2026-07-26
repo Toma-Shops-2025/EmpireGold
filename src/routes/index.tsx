@@ -9,7 +9,7 @@ import {
     Wallet, Gamepad2, Coins, TrendingUp, Trophy,
     Gift, Loader2, Zap, User as UserIcon, LogOut,
     ChevronRight, LayoutGrid, Award, CreditCard, Lock, Mail, ExternalLink, History,
-    PlayCircle, Sparkles
+    PlayCircle, Sparkles, DollarSign
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
@@ -35,15 +35,64 @@ const REWARDS = [
 ];
 
 function AppBackground() {
+  // Generate a fixed set of random positions for the floating money
+  const particles = useMemo(() => {
+    return Array.from({ length: 15 }).map((_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      duration: 15 + Math.random() * 20, // 15-35 seconds
+      delay: Math.random() * -20, // Random start offset
+      size: 20 + Math.random() * 40, // 20-60px
+      opacity: 0.1 + Math.random() * 0.2 // 0.1 to 0.3 opacity
+    }));
+  }, []);
+
   return (
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
+        {/* Main Static Background */}
         <img
             src="/bg-gold.png"
-            className="w-full h-full object-cover opacity-60 scale-105"
+            className="w-full h-full object-cover opacity-40 scale-105"
             alt=""
         />
-        <div className="absolute inset-0 bg-black/40" />
+
+        {/* Floating Particles Overlay */}
+        <div className="absolute inset-0">
+            {particles.map((p) => (
+                <div
+                    key={p.id}
+                    className="absolute animate-float-slow"
+                    style={{
+                        left: p.left,
+                        top: p.top,
+                        animationDuration: `${p.duration}s`,
+                        animationDelay: `${p.delay}s`,
+                        opacity: p.opacity,
+                    }}
+                >
+                    <DollarSign
+                        size={p.size}
+                        className="text-yellow-500 rotate-12"
+                    />
+                </div>
+            ))}
+        </div>
+
+        <div className="absolute inset-0 bg-black/20" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
+
+        <style>{`
+            @keyframes float-slow {
+                0% { transform: translateY(0) rotate(0deg) translateX(0); }
+                33% { transform: translateY(-50px) rotate(10deg) translateX(20px); }
+                66% { transform: translateY(20px) rotate(-10deg) translateX(-20px); }
+                100% { transform: translateY(0) rotate(0deg) translateX(0); }
+            }
+            .animate-float-slow {
+                animation: float-slow infinite linear;
+            }
+        `}</style>
     </div>
   )
 }
@@ -76,7 +125,6 @@ export default function EmpireGoldHub() {
 
         const playTrack = (src: string, volume: number) => {
             if (bgmRef.current) {
-                // If it's a new track, change the source
                 if (!bgmRef.current.src.includes(src)) {
                     bgmRef.current.src = src;
                 }
@@ -85,17 +133,13 @@ export default function EmpireGoldHub() {
             }
         };
 
-        // Logic for which track/volume to play
         if (gameStartTime) {
-            // Stop music while playing games
             bgmRef.current.pause();
         } else if (activeTab === 'home') {
-            playTrack('/audio/promo.MP3', 0.1); // 50% lower than usual base
+            playTrack('/audio/promo.MP3', 0.1);
         } else if (activeTab === 'payouts') {
-            // Play vault music (or promo if vault doesn't exist)
-            playTrack('/audio/vault.MP3', 0.15); // ~25% louder than home
+            playTrack('/audio/vault.MP3', 0.15);
         } else {
-            // Optional: Pause on other tabs or keep promo playing
             bgmRef.current.pause();
         }
 
@@ -104,7 +148,6 @@ export default function EmpireGoldHub() {
         }
     }, [activeTab, gameStartTime, auth.user]);
 
-    // Get the most recently played game
     const lastPlayed = useMemo(() => {
         const entries = Object.entries(history);
         if (entries.length === 0) return null;
@@ -145,7 +188,6 @@ export default function EmpireGoldHub() {
         initAds();
     }, [auth.user]);
 
-    // SHOW INTERSTITIAL ON TRANSITIONS
     const changeTab = async (tab: any) => {
         setActiveTab(tab);
         if (Capacitor.isNativePlatform() && Math.random() > 0.8) {
@@ -159,7 +201,6 @@ export default function EmpireGoldHub() {
         }
     }
 
-    // CHECK FOR PENDING REWARDS
     const checkRewards = useCallback(async () => {
         const startTime = localStorage.getItem('empire_gold_session_start');
         if (startTime && auth.user) {
@@ -168,7 +209,7 @@ export default function EmpireGoldHub() {
             const elapsedMinutes = Math.floor((now - start) / 60000);
             const reward = 0.05 + (elapsedMinutes * 0.02);
             localStorage.removeItem('empire_gold_session_start');
-            setGameStartTime(null); // Clear local "playing" state
+            setGameStartTime(null);
             setSessionTotal(prev => prev + reward);
             await auth.addCash(reward);
             toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsedMinutes} min`, icon: '👑' });
@@ -188,7 +229,7 @@ export default function EmpireGoldHub() {
         setHistory(newHistory);
         localStorage.setItem('empire_gold_history_v5', JSON.stringify(newHistory));
         localStorage.setItem('empire_gold_session_start', Date.now().toString());
-        setGameStartTime(Date.now()); // Mark that we are now playing
+        setGameStartTime(Date.now());
 
         if (Capacitor.isNativePlatform()) {
             await Browser.open({ url, toolbarColor: '#000000' });
