@@ -267,7 +267,10 @@ export default function EmpireGoldHub() {
             <div className="pt-16 pb-12 px-6 rounded-b-[60px] shadow-2xl relative overflow-hidden glass-panel z-10 border-b border-white/5">
                 <div className="flex justify-between items-start mb-10 relative z-10">
                     <div className="space-y-1 text-left">
-                        <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Empire Balance</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Empire Balance</span>
+                            <span className="text-[8px] bg-yellow-400/10 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-400/20 font-bold">V2.0</span>
+                        </div>
                         <div className="flex items-center gap-3">
                             <div className="bg-yellow-400/20 p-2 rounded-xl border border-yellow-400/10">
                                 <Coins className="h-6 w-6 text-yellow-400 drop-shadow-glow" />
