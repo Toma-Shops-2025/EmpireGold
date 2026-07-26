@@ -2,7 +2,8 @@ import EmpireGoldHub from './routes/index'
 import { Toaster } from 'sonner'
 
 function App() {
-  console.log("App: Rendering Empire Gold Hub");
+  // Trigger rebuild for sync
+  console.log("App: Launching Empire Gold Hub");
   return (
     <>
       <EmpireGoldHub />
