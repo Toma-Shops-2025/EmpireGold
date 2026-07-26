@@ -142,12 +142,11 @@ export default function EmpireGoldHub() {
 
         if (gameStartTime) {
             bgmRef.current?.pause();
-        } else if (activeTab === 'home') {
-            playTrack('/audio/promo.MP3', 0.1);
         } else if (activeTab === 'payouts') {
             playTrack('/audio/vault.MP3', 0.15);
         } else {
-            bgmRef.current?.pause();
+            // Play promo on Home, Portals, and History
+            playTrack('/audio/promo.MP3', 0.1);
         }
     }, [activeTab, gameStartTime, auth.user, playTrack]);
 
