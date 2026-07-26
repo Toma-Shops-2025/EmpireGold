@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { CONFIG } from '@/config'
-import { AdMob, BannerAdPosition, BannerAdSize, RewardAdPluginEvents, AdmobAdsConfigOpts } from '@capacitor-community/admob'
+import { AdMob, BannerAdPosition, BannerAdSize, RewardAdPluginEvents } from '@capacitor-community/admob'
 import { Browser } from '@capacitor/browser'
 import { App } from '@capacitor/app'
 import {
@@ -53,6 +53,7 @@ export default function EmpireGoldHub() {
     const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'mygames' | 'payouts'>('home')
     const [isAdLoading, setIsAdLoading] = useState(false)
     const [sessionTotal, setSessionTotal] = useState(0);
+    const [gameStartTime, setGameStartTime] = useState<number | null>(null);
     const [history, setHistory] = useState<Record<string, number>>(() => {
         const saved = localStorage.getItem('empire_gold_history_v5');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
@@ -62,6 +63,46 @@ export default function EmpireGoldHub() {
     const [password, setPassword] = useState('')
     const [username, setUsername] = useState('')
     const [isLogin, setIsLogin] = useState(true)
+
+    // AUDIO ENGINE
+    const bgmRef = useRef<HTMLAudioElement | null>(null);
+
+    useEffect(() => {
+        if (!auth.user) return;
+        if (!bgmRef.current) {
+            bgmRef.current = new Audio();
+            bgmRef.current.loop = true;
+        }
+
+        const playTrack = (src: string, volume: number) => {
+            if (bgmRef.current) {
+                // If it's a new track, change the source
+                if (!bgmRef.current.src.includes(src)) {
+                    bgmRef.current.src = src;
+                }
+                bgmRef.current.volume = volume;
+                bgmRef.current.play().catch(e => console.log("Audio waiting for interaction"));
+            }
+        };
+
+        // Logic for which track/volume to play
+        if (gameStartTime) {
+            // Stop music while playing games
+            bgmRef.current.pause();
+        } else if (activeTab === 'home') {
+            playTrack('/audio/promo.mp3', 0.1); // 50% lower than usual base
+        } else if (activeTab === 'payouts') {
+            // Play vault music (or promo if vault doesn't exist)
+            playTrack('/audio/vault.mp3', 0.15); // ~25% louder than home
+        } else {
+            // Optional: Pause on other tabs or keep promo playing
+            bgmRef.current.pause();
+        }
+
+        return () => {
+            if (bgmRef.current && !auth.user) bgmRef.current.pause();
+        }
+    }, [activeTab, gameStartTime, auth.user]);
 
     // Get the most recently played game
     const lastPlayed = useMemo(() => {
@@ -79,22 +120,19 @@ export default function EmpireGoldHub() {
             try {
                 await AdMob.initialize();
 
-                // Show Banner immediately
                 await AdMob.showBanner({
                     adId: CONFIG.ADMOB_BANNER_ID,
                     position: BannerAdPosition.BOTTOM_CENTER,
                     size: BannerAdSize.ADAPTIVE_BANNER,
                     isTesting: CONFIG.IS_TESTING,
-                    margin: 60 // Keep it above the bottom nav
+                    margin: 60
                 });
 
-                // Prepare Interstitial (Full screen) for later use
                 await AdMob.prepareInterstitial({
                     adId: CONFIG.ADMOB_INTERSTITIAL_ID,
                     isTesting: CONFIG.IS_TESTING
                 });
 
-                // Listeners
                 AdMob.addListener(RewardAdPluginEvents.Rewarded, async () => {
                     await auth.addCash(0.10);
                     toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
@@ -110,11 +148,9 @@ export default function EmpireGoldHub() {
     // SHOW INTERSTITIAL ON TRANSITIONS
     const changeTab = async (tab: any) => {
         setActiveTab(tab);
-        // 20% chance to show a full screen ad when switching tabs
         if (Capacitor.isNativePlatform() && Math.random() > 0.8) {
             try {
                 await AdMob.showInterstitial();
-                // Prepare next one
                 await AdMob.prepareInterstitial({
                     adId: CONFIG.ADMOB_INTERSTITIAL_ID,
                     isTesting: CONFIG.IS_TESTING
@@ -132,6 +168,7 @@ export default function EmpireGoldHub() {
             const elapsedMinutes = Math.floor((now - start) / 60000);
             const reward = 0.05 + (elapsedMinutes * 0.02);
             localStorage.removeItem('empire_gold_session_start');
+            setGameStartTime(null); // Clear local "playing" state
             setSessionTotal(prev => prev + reward);
             await auth.addCash(reward);
             toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsedMinutes} min`, icon: '👑' });
@@ -151,6 +188,7 @@ export default function EmpireGoldHub() {
         setHistory(newHistory);
         localStorage.setItem('empire_gold_history_v5', JSON.stringify(newHistory));
         localStorage.setItem('empire_gold_session_start', Date.now().toString());
+        setGameStartTime(Date.now()); // Mark that we are now playing
 
         if (Capacitor.isNativePlatform()) {
             await Browser.open({ url, toolbarColor: '#000000' });
