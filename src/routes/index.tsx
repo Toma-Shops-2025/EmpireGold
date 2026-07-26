@@ -324,39 +324,39 @@ export default function EmpireGoldHub() {
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
             <AppBackground />
 
-            <div className="pt-16 pb-12 px-6 rounded-b-[60px] shadow-2xl relative overflow-hidden glass-panel z-10 border-b border-white/5">
-                <div className="flex justify-between items-start mb-10 relative z-10">
-                    <div className="space-y-1 text-left">
+            <div className="pt-12 pb-6 px-6 rounded-b-[40px] shadow-2xl relative overflow-hidden glass-panel z-10 border-b border-white/5">
+                <div className="flex justify-between items-start mb-6 relative z-10">
+                    <div className="space-y-0.5 text-left">
                         <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Empire Balance</span>
-                            <span className="text-[8px] bg-yellow-400/10 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-400/20 font-bold">V2.0</span>
+                            <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Empire Balance</span>
+                            <span className="text-[7px] bg-yellow-400/10 text-yellow-400 px-1 py-0.5 rounded border border-yellow-400/20 font-bold">V2.0</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className="bg-yellow-400/20 p-2 rounded-xl border border-yellow-400/10">
-                                <Coins className="h-6 w-6 text-yellow-400 drop-shadow-glow" />
+                            <div className="bg-yellow-400/20 p-1.5 rounded-lg border border-yellow-400/10">
+                                <Coins className="h-5 w-5 text-yellow-400 drop-shadow-glow" />
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-5xl font-black italic tracking-tighter">${cashBalance.toFixed(2)}</span>
-                                {sessionTotal > 0 && <span className="text-[10px] text-green-400 font-bold uppercase">Session: +${sessionTotal.toFixed(2)}</span>}
+                                <span className="text-3xl font-black italic tracking-tighter">${cashBalance.toFixed(2)}</span>
+                                {sessionTotal > 0 && <span className="text-[8px] text-green-400 font-bold uppercase">Session: +${sessionTotal.toFixed(2)}</span>}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="space-y-4 relative z-10 px-1">
-                    <div className="flex justify-between text-[11px] font-black uppercase italic tracking-wider text-left">
+                <div className="space-y-3 relative z-10 px-1">
+                    <div className="flex justify-between text-[9px] font-black uppercase italic tracking-wider text-left">
                         <span className="opacity-40">Milestone Progress</span>
                         <span className="text-yellow-400">{goalPct.toFixed(0)}% to $50.00</span>
                     </div>
-                    <div className="relative pt-4 pb-2">
-                        <div className="h-4 w-full bg-black/40 rounded-full overflow-hidden p-1 border border-white/5 shadow-inner">
-                            <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.4)] transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
+                    <div className="relative pt-3 pb-1">
+                        <div className="h-3 w-full bg-black/40 rounded-full overflow-hidden p-0.5 border border-white/5 shadow-inner">
+                            <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-[0_0_10px_rgba(250,204,21,0.3)] transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
                         </div>
-                        <div className="absolute top-0 inset-x-0 flex justify-between px-2 text-[8px] font-black text-white/40 uppercase">
+                        <div className="absolute top-0 inset-x-0 flex justify-between px-2 text-[7px] font-black text-white/40 uppercase">
                             <span>$0</span>
-                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$5</div>
-                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$10</div>
-                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$25</div>
+                            <div className="flex flex-col items-center"><div className="h-1 w-px bg-white/20 mb-0.5" />$5</div>
+                            <div className="flex flex-col items-center"><div className="h-1 w-px bg-white/20 mb-0.5" />$10</div>
+                            <div className="flex flex-col items-center"><div className="h-1 w-px bg-white/20 mb-0.5" />$25</div>
                             <span>$50</span>
                         </div>
                     </div>
