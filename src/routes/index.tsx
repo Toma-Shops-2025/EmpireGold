@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { CONFIG } from '@/config'
-import { AdMob, BannerAdPosition, BannerAdSize, RewardAdPluginEvents } from '@capacitor-community/admob'
 import { Browser } from '@capacitor/browser'
 import { App } from '@capacitor/app'
 import {
@@ -35,7 +34,6 @@ const REWARDS = [
 ];
 
 function AppBackground() {
-  // Generate a large set of random positions for the floating money
   const particles = useMemo(() => {
     return Array.from({ length: 35 }).map((_, i) => ({
       id: i,
@@ -43,22 +41,19 @@ function AppBackground() {
       top: `${Math.random() * 100}%`,
       duration: 15 + Math.random() * 25,
       delay: Math.random() * -40,
-      size: 80 + Math.random() * 100, // 80px to 180px - BIGGER
-      opacity: 0.15 + Math.random() * 0.25, // 0.15 to 0.4 - BRIGHTER
+      size: 80 + Math.random() * 100,
+      opacity: 0.15 + Math.random() * 0.25,
       rotate: Math.random() * 360,
     }));
   }, []);
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
-        {/* Main Static Background */}
         <img
             src="/bg-gold.png"
             className="w-full h-full object-cover opacity-30 scale-110"
             alt=""
         />
-
-        {/* Floating Particles Overlay */}
         <div className="absolute inset-0 overflow-hidden">
             {particles.map((p) => (
                 <div
@@ -80,10 +75,8 @@ function AppBackground() {
                 </div>
             ))}
         </div>
-
         <div className="absolute inset-0 bg-black/20" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
-
         <style>{`
             @keyframes float-complex {
                 0% { transform: translate(0, 0) rotate(0deg); }
@@ -103,7 +96,7 @@ function AppBackground() {
 export default function EmpireGoldHub() {
     const auth = useAuth()
     const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'mygames' | 'payouts'>('home')
-    const [isAdLoading, setIsAdLoading] = useState(false)
+    const [isProcessing, setIsProcessing] = useState(false)
     const [sessionTotal, setSessionTotal] = useState(0);
     const [gameStartTime, setGameStartTime] = useState<number | null>(null);
     const [hasInteracted, setHasInteracted] = useState(false);
@@ -117,7 +110,6 @@ export default function EmpireGoldHub() {
     const [username, setUsername] = useState('')
     const [isLogin, setIsLogin] = useState(true)
 
-    // AUDIO ENGINE
     const bgmRef = useRef<HTMLAudioElement | null>(null);
 
     const playTrack = useCallback((src: string, volume: number) => {
@@ -125,13 +117,11 @@ export default function EmpireGoldHub() {
             bgmRef.current = new Audio();
             bgmRef.current.loop = true;
         }
-
         const currentFullUrl = window.location.origin + src;
         if (bgmRef.current.src !== currentFullUrl) {
             bgmRef.current.src = src;
         }
         bgmRef.current.volume = volume;
-
         if (hasInteracted) {
             bgmRef.current.play().catch(e => console.log("Audio play blocked:", e));
         }
@@ -139,13 +129,11 @@ export default function EmpireGoldHub() {
 
     useEffect(() => {
         if (!auth.user) return;
-
         if (gameStartTime) {
             bgmRef.current?.pause();
         } else if (activeTab === 'payouts') {
             playTrack('/audio/vault.MP3', 0.15);
         } else {
-            // Play promo on Home, Portals, and History
             playTrack('/audio/promo.MP3', 0.1);
         }
     }, [activeTab, gameStartTime, auth.user, playTrack]);
@@ -174,50 +162,8 @@ export default function EmpireGoldHub() {
         return PROVIDERS.find(p => p.id === id);
     }, [history]);
 
-    // ADMOB CONTROLLER
-    useEffect(() => {
-        if (!auth.user || !Capacitor.isNativePlatform()) return;
-
-        const initAds = async () => {
-            try {
-                await AdMob.initialize();
-
-                await AdMob.showBanner({
-                    adId: CONFIG.ADMOB_BANNER_ID,
-                    position: BannerAdPosition.BOTTOM_CENTER,
-                    size: BannerAdSize.ADAPTIVE_BANNER,
-                    isTesting: CONFIG.IS_TESTING,
-                    margin: 60
-                });
-
-                await AdMob.prepareInterstitial({
-                    adId: CONFIG.ADMOB_INTERSTITIAL_ID,
-                    isTesting: CONFIG.IS_TESTING
-                });
-
-                AdMob.addListener(RewardAdPluginEvents.Rewarded, async () => {
-                    await auth.addCash(0.10);
-                    toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
-                    setIsAdLoading(false);
-                });
-
-            } catch (e) { console.error("AdMob Error", e); }
-        };
-
-        initAds();
-    }, [auth.user]);
-
     const changeTab = async (tab: any) => {
         setActiveTab(tab);
-        if (Capacitor.isNativePlatform() && Math.random() > 0.8) {
-            try {
-                await AdMob.showInterstitial();
-                await AdMob.prepareInterstitial({
-                    adId: CONFIG.ADMOB_INTERSTITIAL_ID,
-                    isTesting: CONFIG.IS_TESTING
-                });
-            } catch(e) {}
-        }
     }
 
     const checkRewards = useCallback(async () => {
@@ -249,7 +195,6 @@ export default function EmpireGoldHub() {
         localStorage.setItem('empire_gold_history_v5', JSON.stringify(newHistory));
         localStorage.setItem('empire_gold_session_start', Date.now().toString());
         setGameStartTime(Date.now());
-
         if (Capacitor.isNativePlatform()) {
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
@@ -258,22 +203,17 @@ export default function EmpireGoldHub() {
         }
     }
 
-    const handleAdWatch = async () => {
-        if (isAdLoading) return;
-        setIsAdLoading(true);
-        if (Capacitor.isNativePlatform()) {
-            try {
-                await AdMob.prepareRewardVideoAd({ adId: CONFIG.ADMOB_REWARDED_ID, isTesting: CONFIG.IS_TESTING });
-                await AdMob.showRewardVideoAd();
-            } catch(e) { setIsAdLoading(false); toast.error("Ad failed to load."); }
-        } else {
-            setTimeout(async () => {
-                await auth.addCash(0.10);
-                setSessionTotal(prev => prev + 0.10);
-                toast.success("Simulated Reward: +$0.10");
-                setIsAdLoading(false);
-            }, 1000);
-        }
+    const handleWatchReward = async () => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        toast.info("Accessing sponsor network...");
+
+        setTimeout(async () => {
+            await auth.addCash(0.10);
+            setSessionTotal(prev => prev + 0.10);
+            toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
+            setIsProcessing(false);
+        }, 1500);
     }
 
     if (auth.loading) return (
@@ -304,7 +244,7 @@ export default function EmpireGoldHub() {
                     </div>
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white value={password}" onChange={e => setPassword(e.target.value)} required />
                     </div>
                     <button type="submit" className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4">
                         {isLogin ? 'Enter Vault' : 'Join Empire'}
@@ -354,9 +294,9 @@ export default function EmpireGoldHub() {
                         </div>
                         <div className="absolute top-0 inset-x-0 flex justify-between px-2 text-[7px] font-black text-white/40 uppercase">
                             <span>$0</span>
-                            <div className="flex flex-col items-center"><div className="h-1 w-px bg-white/20 mb-0.5" />$5</div>
-                            <div className="flex flex-col items-center"><div className="h-1 w-px bg-white/20 mb-0.5" />$10</div>
-                            <div className="flex flex-col items-center"><div className="h-1 w-px bg-white/20 mb-0.5" />$25</div>
+                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$5</div>
+                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$10</div>
+                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$25</div>
                             <span>$50</span>
                         </div>
                     </div>
@@ -383,11 +323,11 @@ export default function EmpireGoldHub() {
                         <DashButton icon={Layers} label="All Portals" color="bg-blue-600" onClick={() => changeTab('portals')} />
                         <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => changeTab('mygames')} />
                         <DashButton icon={Award} label="Vault Wins" color="bg-orange-600" onClick={() => changeTab('payouts')} />
-                        <button onClick={handleAdWatch} disabled={isAdLoading} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50">
+                        <button onClick={handleWatchReward} disabled={isProcessing} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50">
                             <div className="flex items-center gap-6">
-                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">{isAdLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}</div>
+                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">{isProcessing ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}</div>
                                 <div className="flex flex-col text-left">
-                                    <span className="font-black text-white uppercase text-lg italic">{isAdLoading ? "Loading..." : "Watch Ad"}</span>
+                                    <span className="font-black text-white uppercase text-lg italic">{isProcessing ? "Loading..." : "Watch Ad"}</span>
                                     <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-[0.2em]">Earn $0.10 Gold</span>
                                 </div>
                             </div>
