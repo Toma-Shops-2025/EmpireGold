@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'fun.empiregold',
-  appName: 'Empire Gold',
+  appId: 'fun.playnpayday',
+  appName: "Play 'n Payday",
   webDir: 'dist',
   server: {
     androidScheme: 'https'

@@ -229,7 +229,7 @@ export default function EmpireGoldHub() {
             <div className="h-[100dvh] w-full flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar text-left">
                 <AppBackground />
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
-                    Empire<br/><span className="text-yellow-400 font-serif">Gold</span>
+                    Play 'n<br/><span className="text-yellow-400 font-serif">Payday</span>
                 </h1>
                 <form onSubmit={(e) => { e.preventDefault(); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
                     {!isLogin && (
@@ -268,7 +268,7 @@ export default function EmpireGoldHub() {
                 <div className="flex justify-between items-start mb-6 relative z-10">
                     <div className="space-y-0.5 text-left">
                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Empire Balance</span>
+                            <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Payday Balance</span>
                             <span className="text-[7px] bg-yellow-400/10 text-yellow-400 px-1 py-0.5 rounded border border-yellow-400/20 font-bold">V2.0</span>
                         </div>
                         <div className="flex items-center gap-3">
