@@ -1,4 +1,4 @@
-package fun.empiregold;
+package fun.playnpayday;
 
 import com.getcapacitor.BridgeActivity;
 
