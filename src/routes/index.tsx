@@ -109,6 +109,10 @@ export default function EmpireGoldHub() {
     const [password, setPassword] = useState('')
     const [username, setUsername] = useState('')
     const [isLogin, setIsLogin] = useState(true)
+    const [agreed, setAgreed] = useState(false)
+
+    // Legal Overlays
+    const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
 
     const bgmRef = useRef<HTMLAudioElement | null>(null);
 
@@ -231,7 +235,7 @@ export default function EmpireGoldHub() {
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
                     Play 'n<br/><span className="text-yellow-400 font-serif">Payday</span>
                 </h1>
-                <form onSubmit={(e) => { e.preventDefault(); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
+                <form onSubmit={(e) => { e.preventDefault(); if (!isLogin && !agreed) return toast.error("Please agree to the Terms of Service."); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
                     {!isLogin && (
                         <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
@@ -244,8 +248,14 @@ export default function EmpireGoldHub() {
                     </div>
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white value={password}" onChange={e => setPassword(e.target.value)} required />
+                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white" value={password} onChange={e => setPassword(e.target.value)} required />
                     </div>
+                    {!isLogin && (
+                        <div className="flex items-center gap-3 px-4 py-2">
+                            <input type="checkbox" id="terms" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="h-4 w-4 rounded border-white/10 bg-black/40 text-yellow-400" />
+                            <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase">I am 18+ and agree to the <button type="button" onClick={() => setShowLegal('terms')} className="text-yellow-400 underline">Terms</button> & <button type="button" onClick={() => setShowLegal('privacy')} className="text-yellow-400 underline">Privacy</button></label>
+                        </div>
+                    )}
                     <button type="submit" className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4">
                         {isLogin ? 'Enter Vault' : 'Join Empire'}
                     </button>
@@ -253,6 +263,8 @@ export default function EmpireGoldHub() {
                         {isLogin ? "Need an account? Sign Up" : "Back to Login"}
                     </button>
                 </form>
+
+                {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
             </div>
         )
     }
@@ -388,13 +400,23 @@ export default function EmpireGoldHub() {
                              ))}
                         </div>
 
+                        <div className="grid grid-cols-2 gap-4 mt-8">
+                            <button onClick={() => setShowLegal('rules')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">Rules</button>
+                            <button onClick={() => setShowLegal('faq')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">F.A.Q.</button>
+                            <button onClick={() => setShowLegal('privacy')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">Privacy</button>
+                            <button onClick={() => setShowLegal('terms')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">Terms</button>
+                        </div>
+
                         <div className="mt-12 flex flex-col items-center gap-4 text-center pb-20 relative z-10 text-white font-black uppercase">
                             <span className="text-xl italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || auth.user?.email.split('@')[0] || 'Empire Member'}</span>
                             <div className="flex flex-col gap-1 mt-2 opacity-60 text-[10px] font-mono lowercase bg-black/40 p-2 rounded-lg border border-white/10">
                                 <span>{auth.user?.email}</span>
                                 <span className="tracking-tighter text-yellow-400 font-bold">UID: {auth.user?.id}</span>
                             </div>
-                            <button onClick={auth.signOut} className="flex items-center gap-2 text-red-500 text-[10px] tracking-widest active:scale-90 transition-all mt-4"><LogOut className="h-4 w-4" /> Exit Vault</button>
+                            <div className="flex flex-col gap-3 mt-4 w-full px-8">
+                                <button onClick={auth.signOut} className="flex items-center justify-center gap-2 text-white/40 text-[10px] tracking-widest active:scale-90 transition-all"><LogOut className="h-4 w-4" /> Exit Vault</button>
+                                <button onClick={() => { if(confirm("Permanently delete your account and all balance? This cannot be undone.")) auth.signOut(); }} className="text-red-500/40 text-[10px] tracking-widest active:scale-90 transition-all border border-red-500/10 py-3 rounded-xl mt-4">Delete Account</button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -406,8 +428,70 @@ export default function EmpireGoldHub() {
                 <NavButton icon={History} label="History" active={activeTab === 'mygames'} onClick={() => changeTab('mygames')} />
                 <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => changeTab('payouts')} />
             </nav>
+
+            {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
         </div>
     )
+}
+
+function LegalModal({ type, onClose }: { type: 'privacy' | 'terms' | 'faq' | 'rules', onClose: () => void }) {
+    const titles = {
+        privacy: 'Privacy Policy',
+        terms: 'Terms of Service',
+        faq: 'F.A.Q.',
+        rules: 'Official Rules'
+    };
+
+    return (
+        <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-xl flex flex-col p-8 pt-20 animate-in fade-in duration-300 overflow-y-auto">
+            <button onClick={onClose} className="absolute top-8 left-8 text-white/40 uppercase font-black text-[10px] flex items-center gap-2 active:scale-90 transition-transform">
+                <ChevronRight className="h-4 w-4 rotate-180" /> Back
+            </button>
+            <h2 className="text-4xl font-black italic uppercase mb-8 mt-4">{titles[type]}</h2>
+            <div className="text-white/60 text-xs font-bold uppercase leading-relaxed space-y-6 pb-20">
+                {type === 'privacy' && (
+                    <>
+                        <p>We take your privacy seriously. This app collects minimal data required to maintain your account and process rewards.</p>
+                        <p>Data collected includes: Email address, username, and device identifiers for security purposes.</p>
+                        <p>We do not sell your personal data to third parties. Your balance is tied to your account and is synced across your devices.</p>
+                    </>
+                )}
+                {type === 'terms' && (
+                    <>
+                        <p>By using Play 'n Payday, you agree to these terms. You must be at least 18 years old to use this application.</p>
+                        <p>One account per user. Fraudulent activity, including use of automation or VPNs, will result in account termination and loss of balance.</p>
+                        <p>Rewards are not guaranteed and are subject to verification of legitimate gameplay.</p>
+                    </>
+                )}
+                {type === 'faq' && (
+                    <>
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="text-yellow-400 mb-1">How do I earn?</h4>
+                                <p>Open portals to play arcade games. Your balance grows the longer you play!</p>
+                            </div>
+                            <div>
+                                <h4 className="text-yellow-400 mb-1">When can I cash out?</h4>
+                                <p>You can request a reward once you reach the required milestone ($5, $10, etc.).</p>
+                            </div>
+                            <div>
+                                <h4 className="text-yellow-400 mb-1">How long does it take?</h4>
+                                <p>Payouts are typically processed within 48 business hours.</p>
+                            </div>
+                        </div>
+                    </>
+                )}
+                {type === 'rules' && (
+                    <>
+                        <p>1. Play games through the official portals to earn Gold.</p>
+                        <p>2. Royal Rewards are awarded based on active session time.</p>
+                        <p>3. Do not close the app while playing to ensure your session is recorded.</p>
+                        <p>4. Ad-supported rewards can be claimed periodically for instant balance boosts.</p>
+                    </>
+                )}
+            </div>
+        </div>
+    );
 }
 
 function DashButton({ icon: Icon, label, color, onClick }: any) {
