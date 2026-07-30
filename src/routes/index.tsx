@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
+import { showRewardedAd } from '@/lib/ads'
 
 // THE EMPIRE GOLD PROVIDERS
 const PROVIDERS = [
@@ -212,12 +213,20 @@ export default function EmpireGoldHub() {
         setIsProcessing(true);
         toast.info("Accessing sponsor network...");
 
-        setTimeout(async () => {
-            await auth.addCash(0.10);
-            setSessionTotal(prev => prev + 0.10);
-            toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
+        try {
+            const ad = await showRewardedAd();
+            if (ad.success) {
+                await auth.addCash(0.10);
+                setSessionTotal(prev => prev + 0.10);
+                toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
+            } else {
+                toast.error("Ad not ready", { description: "Please try again in a moment." });
+            }
+        } catch (e) {
+            console.error("Ad error", e);
+        } finally {
             setIsProcessing(false);
-        }, 1500);
+        }
     }
 
     if (auth.loading) return (
@@ -414,6 +423,7 @@ export default function EmpireGoldHub() {
                                 <span className="tracking-tighter text-yellow-400 font-bold">UID: {auth.user?.id}</span>
                             </div>
                             <div className="flex flex-col gap-3 mt-4 w-full px-8">
+                                <button onClick={() => window.location.assign('mailto:support@playnpayday.fun')} className="flex items-center justify-center gap-2 text-yellow-400 text-[10px] font-black uppercase tracking-widest active:scale-90 transition-all border border-yellow-400/20 py-4 rounded-2xl mb-2">Contact Support</button>
                                 <button onClick={auth.signOut} className="flex items-center justify-center gap-2 text-white/40 text-[10px] tracking-widest active:scale-90 transition-all"><LogOut className="h-4 w-4" /> Exit Vault</button>
                                 <button onClick={() => { if(confirm("Permanently delete your account and all balance? This cannot be undone.")) auth.signOut(); }} className="text-red-500/40 text-[10px] tracking-widest active:scale-90 transition-all border border-red-500/10 py-3 rounded-xl mt-4">Delete Account</button>
                             </div>
