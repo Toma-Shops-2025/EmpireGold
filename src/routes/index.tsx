@@ -113,8 +113,7 @@ export default function EmpireGoldHub() {
     const [agreed, setAgreed] = useState(false)
     const [loading, setLoading] = useState(false)
 
-    // Legal Overlays
-    const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
+    const [showPass, setShowPass] = useState(false)
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -132,13 +131,20 @@ export default function EmpireGoldHub() {
                 toast.success("Welcome back to the Vault!");
             } else {
                 await auth.signUp(email, password, username);
-                toast.success("Account created successfully!");
+                // After signup, attempt to sign in immediately for a better experience
+                try {
+                    await auth.signIn(email, password);
+                    toast.success("Empire Joined! Welcome.");
+                } catch {
+                    toast.success("Account created! Please log in.");
+                    setIsLogin(true);
+                }
             }
         } catch (error: any) {
             console.error("Auth error:", error);
-            toast.error("Authentication Failed", {
-                description: error.message || "Check your credentials and try again."
-            });
+            let msg = error.message || "Check your credentials and try again.";
+            if (msg.includes("User already registered")) msg = "This email is already in use.";
+            toast.error("Authentication Failed", { description: msg });
         } finally {
             setLoading(false);
         }
@@ -284,16 +290,19 @@ export default function EmpireGoldHub() {
                         <Mail className="h-5 w-5 text-white/40 mr-3" />
                         <input type="email" placeholder="Email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
                     </div>
-                    <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
+                    <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
                         <input
-                            type="password"
+                            type={showPass ? "text" : "password"}
                             placeholder="Password"
-                            className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20"
+                            className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-10"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
                         />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20 hover:text-white/60">
+                            {showPass ? <Sparkles className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                        </button>
                     </div>
                     {!isLogin && (
                         <div className="flex items-center gap-3 px-4 py-2">
