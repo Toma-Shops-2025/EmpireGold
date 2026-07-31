@@ -111,9 +111,38 @@ export default function EmpireGoldHub() {
     const [username, setUsername] = useState('')
     const [isLogin, setIsLogin] = useState(true)
     const [agreed, setAgreed] = useState(false)
+    const [loading, setLoading] = useState(false)
 
     // Legal Overlays
     const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
+
+    const handleAuth = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (loading) return;
+
+        if (!isLogin && !agreed) {
+            toast.error("Please agree to the Terms of Service.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (isLogin) {
+                await auth.signIn(email, password);
+                toast.success("Welcome back to the Vault!");
+            } else {
+                await auth.signUp(email, password, username);
+                toast.success("Account created successfully!");
+            }
+        } catch (error: any) {
+            console.error("Auth error:", error);
+            toast.error("Authentication Failed", {
+                description: error.message || "Check your credentials and try again."
+            });
+        } finally {
+            setLoading(false);
+        }
+    }
 
     const bgmRef = useRef<HTMLAudioElement | null>(null);
 
@@ -244,7 +273,7 @@ export default function EmpireGoldHub() {
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
                     Play 'n<br/><span className="text-yellow-400 font-serif">Payday</span>
                 </h1>
-                <form onSubmit={(e) => { e.preventDefault(); if (!isLogin && !agreed) return toast.error("Please agree to the Terms of Service."); isLogin ? auth.signIn(email, password) : auth.signUp(email, password, username); }} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
+                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
                     {!isLogin && (
                         <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
@@ -257,7 +286,14 @@ export default function EmpireGoldHub() {
                     </div>
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="password" placeholder="Password" className="bg-transparent outline-none w-full font-bold text-white" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <input
+                            type="password"
+                            placeholder="Password"
+                            className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            required
+                        />
                     </div>
                     {!isLogin && (
                         <div className="flex items-center gap-3 px-4 py-2">
@@ -265,7 +301,12 @@ export default function EmpireGoldHub() {
                             <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase">I am 18+ and agree to the <button type="button" onClick={() => setShowLegal('terms')} className="text-yellow-400 underline">Terms</button> & <button type="button" onClick={() => setShowLegal('privacy')} className="text-yellow-400 underline">Privacy</button></label>
                         </div>
                     )}
-                    <button type="submit" className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4">
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {loading && <Loader2 className="h-5 w-5 animate-spin" />}
                         {isLogin ? 'Enter Vault' : 'Join Empire'}
                     </button>
                     <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/40 font-black uppercase mt-6 underline tracking-[0.2em] relative z-10">
