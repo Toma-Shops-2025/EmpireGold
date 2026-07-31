@@ -97,7 +97,13 @@ export function useAuth() {
       });
       if (error) throw error;
       if (data.user) {
-          await supabase.from('profiles').insert({ id: data.user.id, username: u, cash_balance: 0 });
+          // Now including email in the profile record
+          await supabase.from('profiles').insert({
+              id: data.user.id,
+              username: u,
+              email: e,
+              cash_balance: 0
+          });
       }
   };
 
