@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
-import { CONFIG } from '@/config'
 import { Browser } from '@capacitor/browser'
-import { App } from '@capacitor/app'
 import {
     Wallet, Gamepad2, Coins, TrendingUp, Trophy,
     Gift, Loader2, Zap, User as UserIcon, LogOut,
@@ -14,6 +12,14 @@ import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
 import { showRewardedAd } from '@/lib/ads'
 
+// CONFIG CONSTANTS
+const CONFIG = {
+    POINTS_PER_DAUB: 10,
+    BINGO_BONUS: 500,
+    X_PATTERN_BONUS: 1000,
+    ROUND_TIME_LIMIT: 120,
+};
+
 // THE EMPIRE GOLD PROVIDERS
 const PROVIDERS = [
     { id: 'poki', name: 'Poki Arcade', desc: 'The biggest web arcade', url: 'https://poki.com', color: 'bg-blue-600', icon: Gamepad2 },
@@ -23,38 +29,36 @@ const PROVIDERS = [
 ];
 
 const REWARDS = [
-    { id: 'v5', name: '$5 Visa Card', cost: 5.00, type: 'Visa' },
-    { id: 'a5', name: '$5 Amazon Gift', cost: 5.00, type: 'Amazon' },
-    { id: 'p5', name: '$5 PayPal Cash', cost: 5.00, type: 'PayPal' },
-    { id: 'v10', name: '$10 Visa Card', cost: 10.00, type: 'Visa' },
-    { id: 'a10', name: '$10 Amazon Gift', cost: 10.00, type: 'Amazon' },
-    { id: 'p10', name: '$10 PayPal Cash', cost: 10.00, type: 'PayPal' },
-    { id: 'v25', name: '$25 Visa Card', cost: 25.00, type: 'Visa' },
-    { id: 'a25', name: '$25 Amazon Gift', cost: 25.00, type: 'Amazon' },
-    { id: 'p25', name: '$25 PayPal Cash', cost: 25.00, type: 'PayPal' },
+    { id: 'v5', name: '$5 Visa Card', jp: 250000, type: 'Visa' },
+    { id: 'a5', name: '$5 Amazon Gift', jp: 250000, type: 'Amazon' },
+    { id: 'p5', name: '$5 PayPal Cash', jp: 250000, type: 'PayPal' },
+    { id: 'v10', name: '$10 Visa Card', jp: 500000, type: 'Visa' },
+    { id: 'a10', name: '$10 Amazon Gift', jp: 500000, type: 'Amazon' },
+    { id: 'p10', name: '$10 PayPal Cash', jp: 500000, type: 'PayPal' },
+    { id: 'v25', name: '$25 Visa Card', jp: 1250000, type: 'Visa' },
+    { id: 'a25', name: '$25 Amazon Gift', jp: 1250000, type: 'Amazon' },
+    { id: 'p25', name: '$25 PayPal Cash', jp: 1250000, type: 'PayPal' },
+    { id: 'v50', name: '$50 Visa Card', jp: 2500000, type: 'Visa' },
+    { id: 'a50', name: '$50 Amazon Gift', jp: 2500000, type: 'Amazon' },
+    { id: 'p50', name: '$50 PayPal Cash', jp: 2500000, type: 'PayPal' },
 ];
 
 function AppBackground() {
   const particles = useMemo(() => {
-    return Array.from({ length: 35 }).map((_, i) => ({
+    return Array.from({ length: 25 }).map((_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       top: `${Math.random() * 100}%`,
-      duration: 15 + Math.random() * 25,
+      duration: 20 + Math.random() * 30,
       delay: Math.random() * -40,
-      size: 80 + Math.random() * 100,
-      opacity: 0.15 + Math.random() * 0.25,
+      size: 60 + Math.random() * 80,
+      opacity: 0.1 + Math.random() * 0.2,
       rotate: Math.random() * 360,
     }));
   }, []);
 
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
-        <img
-            src="/bg-gold.png"
-            className="w-full h-full object-cover opacity-30 scale-110"
-            alt=""
-        />
+    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-[#050505]">
         <div className="absolute inset-0 overflow-hidden">
             {particles.map((p) => (
                 <div
@@ -70,20 +74,18 @@ function AppBackground() {
                 >
                     <DollarSign
                         size={p.size}
-                        className="text-yellow-500 drop-shadow-[0_0_15px_rgba(234,179,8,0.4)]"
+                        className="text-yellow-600/40"
                         style={{ transform: `rotate(${p.rotate}deg)` }}
                     />
                 </div>
             ))}
         </div>
-        <div className="absolute inset-0 bg-black/20" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/40 to-black" />
         <style>{`
             @keyframes float-complex {
                 0% { transform: translate(0, 0) rotate(0deg); }
-                25% { transform: translate(-40px, 40px) rotate(90deg); }
-                50% { transform: translate(40px, 80px) rotate(180deg); }
-                75% { transform: translate(-40px, 40px) rotate(270deg); }
+                33% { transform: translate(-30px, 30px) rotate(120deg); }
+                66% { transform: translate(30px, -20px) rotate(240deg); }
                 100% { transform: translate(0, 0) rotate(360deg); }
             }
             .animate-float-complex {
@@ -94,15 +96,17 @@ function AppBackground() {
   )
 }
 
-export default function EmpireGoldHub() {
-    const auth = useAuth()
-    const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'mygames' | 'payouts'>('home')
+export default function PlayNPaydayHub() {
+    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, supabase, fetchProfile } = useAuth()
+    const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'history' | 'wins'>('home')
     const [isProcessing, setIsProcessing] = useState(false)
     const [sessionTotal, setSessionTotal] = useState(0);
     const [gameStartTime, setGameStartTime] = useState<number | null>(null);
     const [hasInteracted, setHasInteracted] = useState(false);
+    const [leaderboard, setLeaderboard] = useState<any[]>([]);
+    const [adminPayouts, setAdminPayouts] = useState<any[]>([]);
     const [history, setHistory] = useState<Record<string, number>>(() => {
-        const saved = localStorage.getItem('empire_gold_history_v5');
+        const saved = localStorage.getItem('pnp_history_v1');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
     });
 
@@ -112,39 +116,34 @@ export default function EmpireGoldHub() {
     const [isLogin, setIsLogin] = useState(true)
     const [agreed, setAgreed] = useState(false)
     const [loading, setLoading] = useState(false)
-
     const [showPass, setShowPass] = useState(false)
+    const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         if (loading) return;
-
         if (!isLogin && !agreed) {
             toast.error("Please agree to the Terms of Service.");
             return;
         }
-
         setLoading(true);
         try {
             if (isLogin) {
-                await auth.signIn(email, password);
-                toast.success("Welcome back to the Vault!");
+                await signIn(email, password);
+                toast.success("Welcome back!");
             } else {
-                await auth.signUp(email, password, username);
-                // After signup, attempt to sign in immediately for a better experience
+                await signUp(email, password, username);
                 try {
-                    await auth.signIn(email, password);
-                    toast.success("Empire Joined! Welcome.");
+                    await signIn(email, password);
+                    toast.success("Welcome to Play 'n Payday!");
                 } catch {
-                    toast.success("Account created! Please log in.");
                     setIsLogin(true);
+                    toast.success("Account created! Please log in.");
                 }
             }
         } catch (error: any) {
             console.error("Auth error:", error);
-            let msg = error.message || "Check your credentials and try again.";
-            if (msg.includes("User already registered")) msg = "This email is already in use.";
-            toast.error("Authentication Failed", { description: msg });
+            toast.error("Auth Failed", { description: error.message });
         } finally {
             setLoading(false);
         }
@@ -168,15 +167,15 @@ export default function EmpireGoldHub() {
     }, [hasInteracted]);
 
     useEffect(() => {
-        if (!auth.user) return;
+        if (!user) return;
         if (gameStartTime) {
             bgmRef.current?.pause();
-        } else if (activeTab === 'payouts') {
+        } else if (activeTab === 'wins') {
             playTrack('/audio/vault.MP3', 0.15);
         } else {
             playTrack('/audio/promo.MP3', 0.1);
         }
-    }, [activeTab, gameStartTime, auth.user, playTrack]);
+    }, [activeTab, gameStartTime, user, playTrack]);
 
     useEffect(() => {
         const handleFirstInteraction = () => {
@@ -202,44 +201,40 @@ export default function EmpireGoldHub() {
         return PROVIDERS.find(p => p.id === id);
     }, [history]);
 
-    const changeTab = async (tab: any) => {
-        setActiveTab(tab);
-    }
-
     const checkRewards = useCallback(async () => {
-        const startTime = localStorage.getItem('empire_gold_session_start');
-        if (startTime && auth.user) {
+        const startTime = localStorage.getItem('pnp_session_start');
+        if (startTime && user) {
             const start = parseInt(startTime);
             const now = Date.now();
             const elapsedMinutes = Math.floor((now - start) / 60000);
+            if (elapsedMinutes < 1) return;
             const reward = 0.05 + (elapsedMinutes * 0.02);
-            localStorage.removeItem('empire_gold_session_start');
+            localStorage.removeItem('pnp_session_start');
             setGameStartTime(null);
             setSessionTotal(prev => prev + reward);
-            await auth.addCash(reward);
+            await addCash(reward);
             toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsedMinutes} min`, icon: '👑' });
         }
-    }, [auth]);
+    }, [user, addCash]);
 
     useEffect(() => {
-        if (!auth.user) return;
+        if (!user) return;
         checkRewards();
         const onVisibilityChange = () => { if (document.visibilityState === 'visible') checkRewards(); };
         window.addEventListener('focus', onVisibilityChange);
         return () => window.removeEventListener('focus', onVisibilityChange);
-    }, [auth.user, checkRewards]);
+    }, [user, checkRewards]);
 
     const openPortal = async (portalId: string, url: string) => {
         const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
-        localStorage.setItem('empire_gold_history_v5', JSON.stringify(newHistory));
-        localStorage.setItem('empire_gold_session_start', Date.now().toString());
+        localStorage.setItem('pnp_history_v1', JSON.stringify(newHistory));
+        localStorage.setItem('pnp_session_start', Date.now().toString());
         setGameStartTime(Date.now());
         if (Capacitor.isNativePlatform()) {
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
             window.open(url, '_blank');
-            toast.info("Arcade opened! Return here when finished to claim your Gold.");
         }
     }
 
@@ -247,13 +242,12 @@ export default function EmpireGoldHub() {
         if (isProcessing) return;
         setIsProcessing(true);
         toast.info("Accessing sponsor network...");
-
         try {
             const ad = await showRewardedAd();
             if (ad.success) {
-                await auth.addCash(0.10);
+                await addCash(0.10);
                 setSessionTotal(prev => prev + 0.10);
-                toast.success("Gold Earned!", { description: "+$0.10 added to your vault." });
+                toast.success("Cash Earned!", { description: "+$0.10 added to your vault." });
             } else {
                 toast.error("Ad not ready", { description: "Please try again in a moment." });
             }
@@ -264,7 +258,49 @@ export default function EmpireGoldHub() {
         }
     }
 
-    if (auth.loading) return (
+    const handlePayoutRequest = async (reward: any) => {
+        if ((profile?.cash_balance || 0) < (reward.jp / 50000)) return; // Simple conversion logic
+        if (!confirm(`Redeem ${reward.jp.toLocaleString()} JS for a ${reward.name}?`)) return;
+        try {
+            const { error } = await supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: reward.name, points_cost: reward.jp, status: 'pending' });
+            if (error) throw error;
+            await addCash(-(reward.jp / 50000));
+            toast.success("Redemption Submitted!", {
+                description: "Check your email for instructions. Payouts are processed within 24-48 hours.",
+                duration: 6000
+            });
+        } catch (e: any) { alert(e.message); }
+    }
+
+    useEffect(() => {
+        if (activeTab === 'wins' && supabase) {
+            const fetchL = async () => {
+                try {
+                    const { data } = await supabase
+                        .from('profiles')
+                        .select('username, cash_balance, total_earned')
+                        .order('total_earned', { ascending: false })
+                        .limit(10);
+                    if (data) setLeaderboard(data);
+
+                    // ADMIN ONLY: Fetch pending payouts
+                    if (user?.email?.includes('gmail.com') || user?.email?.includes('playnpayday.fun')) {
+                        const { data: payouts } = await supabase
+                            .from('payout_requests')
+                            .select('*, profiles(username, email)')
+                            .eq('status', 'pending')
+                            .order('created_at', { ascending: false });
+                        if (payouts) setAdminPayouts(payouts);
+                    }
+                } catch (e) {
+                    console.warn("Leaderboard error", e);
+                }
+            };
+            fetchL();
+        }
+    }, [activeTab, supabase, user]);
+
+    if (authLoading) return (
         <div className="h-screen w-full bg-black flex flex-col items-center justify-center text-white p-8">
             <AppBackground />
             <Loader2 className="animate-spin h-10 w-10 mb-4 text-yellow-400 relative z-10" />
@@ -272,7 +308,7 @@ export default function EmpireGoldHub() {
         </div>
     );
 
-    if (!auth.user) {
+    if (!user) {
         return (
             <div className="h-[100dvh] w-full flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar text-left">
                 <AppBackground />
@@ -292,17 +328,8 @@ export default function EmpireGoldHub() {
                     </div>
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input
-                            type={showPass ? "text" : "password"}
-                            placeholder="Password"
-                            className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-10"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            required
-                        />
-                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20 hover:text-white/60">
-                            {showPass ? <Sparkles className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                        </button>
+                        <input type={showPass ? "text" : "password"} placeholder="Password" title="password" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <Sparkles size={16}/> : <Lock size={16}/>}</button>
                     </div>
                     {!isLogin && (
                         <div className="flex items-center gap-3 px-4 py-2">
@@ -310,31 +337,25 @@ export default function EmpireGoldHub() {
                             <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase">I am 18+ and agree to the <button type="button" onClick={() => setShowLegal('terms')} className="text-yellow-400 underline">Terms</button> & <button type="button" onClick={() => setShowLegal('privacy')} className="text-yellow-400 underline">Privacy</button></label>
                         </div>
                     )}
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {loading && <Loader2 className="h-5 w-5 animate-spin" />}
+                    <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 flex items-center justify-center gap-2">
+                        {loading && <Loader2 className="animate-spin h-5 w-5" />}
                         {isLogin ? 'Enter Vault' : 'Join Empire'}
                     </button>
                     <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/40 font-black uppercase mt-6 underline tracking-[0.2em] relative z-10">
                         {isLogin ? "Need an account? Sign Up" : "Back to Login"}
                     </button>
                 </form>
-
                 {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
             </div>
         )
     }
 
-    const cashBalance = parseFloat(auth.profile?.cash_balance?.toString() || "0");
+    const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
     const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
 
     return (
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
             <AppBackground />
-
             <div className="pt-12 pb-6 px-6 rounded-b-[40px] shadow-2xl relative overflow-hidden glass-panel z-10 border-b border-white/5">
                 <div className="flex justify-between items-start mb-6 relative z-10">
                     <div className="space-y-0.5 text-left">
@@ -376,7 +397,7 @@ export default function EmpireGoldHub() {
 
             <div className="flex-1 overflow-y-auto px-6 pt-8 pb-48 no-scrollbar relative z-10 text-left">
                 {activeTab === 'home' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-500">
+                    <div className="space-y-4">
                         {lastPlayed && (
                             <button onClick={() => openPortal(lastPlayed.id, lastPlayed.url)} className="w-full bg-gradient-to-r from-yellow-400/20 to-transparent p-[1px] rounded-[35px] group">
                                 <div className="bg-black/60 backdrop-blur-xl p-5 rounded-[34px] flex items-center justify-between border border-white/5 group-active:scale-95 transition-all">
@@ -391,10 +412,9 @@ export default function EmpireGoldHub() {
                                 </div>
                             </button>
                         )}
-                        <DashButton icon={Layers} label="All Portals" color="bg-blue-600" onClick={() => changeTab('portals')} />
-                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => changeTab('mygames')} />
-                        <DashButton icon={Award} label="Vault Wins" color="bg-orange-600" onClick={() => changeTab('payouts')} />
-                        <button onClick={handleWatchReward} disabled={isProcessing} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50">
+                        <DashButton icon={LayoutGrid} label="All Portals" color="bg-blue-600" onClick={() => setActiveTab('portals')} />
+                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => setActiveTab('history')} />
+                        <button onClick={handleWatchReward} disabled={isProcessing} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50 mt-4">
                             <div className="flex items-center gap-6">
                                 <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">{isProcessing ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}</div>
                                 <div className="flex flex-col text-left">
@@ -408,85 +428,100 @@ export default function EmpireGoldHub() {
                 )}
 
                 {activeTab === 'portals' && (
-                    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                         <h2 className="text-4xl font-black italic uppercase text-center mt-4">Elite <span className="text-yellow-400">Portals</span></h2>
-                         <div className="grid grid-cols-2 gap-4">
-                            {PROVIDERS.map(p => (
-                                <button key={p.id} onClick={() => openPortal(p.id, p.url)} className={cn("p-6 h-48 rounded-[45px] text-left relative overflow-hidden active:scale-95 transition-all glass-card border border-white/10 shadow-2xl", p.color)}>
-                                    <div className="absolute top-0 right-0 p-4 opacity-10"><ExternalLink className="h-12 w-12" /></div>
-                                    <span className="block font-black uppercase text-base italic leading-tight">{p.name}</span>
-                                    <span className="block text-[8px] font-bold opacity-60 mt-1 uppercase tracking-tighter">Enter Arcade</span>
-                                </button>
-                            ))}
-                         </div>
+                    <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-right duration-300">
+                        {PROVIDERS.map(p => (
+                            <button key={p.id} onClick={() => openPortal(p.id, p.url)} className={cn("p-6 h-48 rounded-[45px] text-left relative overflow-hidden active:scale-95 transition-all glass-card border border-white/10 shadow-2xl", p.color)}>
+                                <div className="absolute top-0 right-0 p-4 opacity-10"><ExternalLink className="h-12 w-12" /></div>
+                                <span className="block font-black uppercase text-base italic leading-tight">{p.name}</span>
+                                <span className="block text-[8px] font-bold opacity-60 mt-1 uppercase tracking-tighter">Enter Arcade</span>
+                            </button>
+                        ))}
                     </div>
                 )}
 
-                {activeTab === 'mygames' && (
-                    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                        <div className="flex items-center gap-2 px-2 text-white/60 mb-4">
-                            <History className="h-4 w-4" />
-                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] italic">Recent Activity</h3>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3">
-                            {PROVIDERS.map(p => {
-                                const time = history[p.id];
-                                return (
-                                    <div key={p.id} onClick={() => openPortal(p.id, p.url)} className="glass-card p-6 rounded-[45px] flex items-center justify-between active:scale-[0.98] transition-all group border border-white/5 shadow-2xl cursor-pointer">
-                                        <div className="flex items-center gap-5">
-                                            <div className={cn("p-4 rounded-2xl text-white shadow-lg", p.color)}><p.icon className="h-6 w-6" /></div>
-                                            <div className="flex flex-col">
-                                                <span className="font-black text-white uppercase text-xs tracking-tight">{p.name}</span>
-                                                <span className="text-[10px] text-yellow-400/80 font-bold mt-1 uppercase tracking-wider">
-                                                    {time ? `Last: ${new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "No activity yet"}
-                                                </span>
-                                            </div>
+                {activeTab === 'history' && (
+                    <div className="space-y-3 animate-in slide-in-from-right duration-300">
+                        {PROVIDERS.map(p => {
+                            const time = history[p.id];
+                            return (
+                                <div key={p.id} onClick={() => openPortal(p.id, p.url)} className="glass-card p-6 rounded-[45px] flex items-center justify-between border border-white/5 shadow-2xl">
+                                    <div className="flex items-center gap-5">
+                                        <div className={cn("p-4 rounded-2xl text-white shadow-lg", p.color)}><p.icon className="h-6 w-6" /></div>
+                                        <div className="flex flex-col">
+                                            <span className="font-black text-white uppercase text-xs tracking-tight">{p.name}</span>
+                                            <span className="text-[10px] text-yellow-400/80 font-bold mt-1 uppercase tracking-wider">
+                                                {time ? `Last: ${new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "No activity yet"}
+                                            </span>
                                         </div>
-                                        <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-yellow-400 transition-colors" />
                                     </div>
-                                )
-                            })}
-                        </div>
+                                    <ChevronRight className="h-4 w-4 text-white/20" />
+                                </div>
+                            )
+                        })}
                     </div>
                 )}
 
-                {activeTab === 'payouts' && (
-                    <div className="space-y-6 animate-in slide-in-from-right duration-300 px-2 pb-32">
-                        <div className="space-y-4 mt-4">
-                             <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-4 text-white">Vault Rewards</h4>
-                             {REWARDS.map(r => (
-                                 <RewardCard key={r.id} title={r.name} cost={r.cost} balance={cashBalance} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} />
-                             ))}
+                {activeTab === 'wins' && (
+                    <div className="space-y-6 animate-in slide-in-from-right duration-300 pb-32">
+                        <div className="space-y-4">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-4 text-white">Vault Rewards</h4>
+                            {REWARDS.map(r => (
+                                <RewardCard key={r.id} title={r.name} cost={r.jp} balance={cashBalance * 50000} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} onRedeem={() => handlePayoutRequest(r)} />
+                            ))}
                         </div>
+
+                        <div className="bg-white/5 border border-white/10 p-6 rounded-[40px] mt-8">
+                            <div className="flex flex-col items-center gap-2 mb-6">
+                                <Trophy className="h-8 w-8 text-yellow-400" />
+                                <h3 className="text-xs font-black uppercase tracking-widest text-yellow-400">Global Leaderboard</h3>
+                            </div>
+                            <div className="space-y-3">
+                                {leaderboard.map((u, i) => (
+                                    <div key={i} className="flex justify-between items-center text-[10px] font-black border-b border-white/5 pb-2">
+                                        <span className="flex items-center gap-2"><span className="opacity-30">{i+1}.</span> {u.username}</span>
+                                        <span className="text-primary italic">{(u.total_earned || u.cash_balance * 50000 || 0).toLocaleString()} JS</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {adminPayouts.length > 0 && (
+                            <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-[40px] mt-8 animate-pulse">
+                                <h3 className="text-xs font-black uppercase tracking-widest text-red-500 mb-4 text-center">Admin: Pending Payouts</h3>
+                                <div className="space-y-4">
+                                    {adminPayouts.map((p, i) => (
+                                        <div key={i} className="text-[10px] bg-black/40 p-3 rounded-2xl border border-white/5">
+                                            <div className="flex justify-between font-black uppercase italic mb-1">
+                                                <span>{p.profiles?.username}</span>
+                                                <span className="text-green-400">{p.reward_name}</span>
+                                            </div>
+                                            <div className="opacity-40 font-mono truncate">{p.profiles?.email}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-4 mt-8">
-                            <button onClick={() => setShowLegal('rules')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">Rules</button>
-                            <button onClick={() => setShowLegal('faq')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">F.A.Q.</button>
-                            <button onClick={() => setShowLegal('privacy')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">Privacy</button>
-                            <button onClick={() => setShowLegal('terms')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">Terms</button>
+                            <button onClick={() => setShowLegal('rules')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px]">Rules</button>
+                            <button onClick={() => setShowLegal('privacy')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px]">Privacy</button>
                         </div>
 
-                        <div className="mt-12 flex flex-col items-center gap-4 text-center pb-20 relative z-10 text-white font-black uppercase">
-                            <span className="text-xl italic border-b border-yellow-400/20 pb-1">{auth.profile?.username || auth.user?.email.split('@')[0] || 'Empire Member'}</span>
-                            <div className="flex flex-col gap-1 mt-2 opacity-60 text-[10px] font-mono lowercase bg-black/40 p-2 rounded-lg border border-white/10">
-                                <span>{auth.user?.email}</span>
-                                <span className="tracking-tighter text-yellow-400 font-bold">UID: {auth.user?.id}</span>
-                            </div>
-                            <div className="flex flex-col gap-3 mt-4 w-full px-8">
-                                <button onClick={() => window.location.assign('mailto:support@playnpayday.fun')} className="flex items-center justify-center gap-2 text-yellow-400 text-[10px] font-black uppercase tracking-widest active:scale-90 transition-all border border-yellow-400/20 py-4 rounded-2xl mb-2">Contact Support</button>
-                                <button onClick={auth.signOut} className="flex items-center justify-center gap-2 text-white/40 text-[10px] tracking-widest active:scale-90 transition-all"><LogOut className="h-4 w-4" /> Exit Vault</button>
-                                <button onClick={() => { if(confirm("Permanently delete your account and all balance? This cannot be undone.")) auth.signOut(); }} className="text-red-500/40 text-[10px] tracking-widest active:scale-90 transition-all border border-red-500/10 py-3 rounded-xl mt-4">Delete Account</button>
-                            </div>
+                        <div className="flex flex-col items-center gap-4 text-center mt-12 pb-20">
+                            <span className="text-sm font-black uppercase italic text-yellow-400/60">{profile?.username || 'Empire Member'}</span>
+                            <button onClick={() => window.location.assign('mailto:support@playnpayday.fun')} className="text-yellow-400 text-[10px] font-black uppercase tracking-widest border border-yellow-400/20 px-8 py-3 rounded-xl">Contact Support</button>
+                            <button onClick={signOut} className="text-white/20 text-[10px] font-black uppercase tracking-widest mt-4">Log Out</button>
+                            <button onClick={() => { if(confirm("Permanently delete account?")) signOut(); }} className="text-red-500/20 text-[10px] font-black uppercase tracking-widest mt-2">Delete Account</button>
                         </div>
                     </div>
                 )}
             </div>
 
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-12 z-[5000]">
-                <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => changeTab('home')} />
-                <NavButton icon={Layers} label="Portals" active={activeTab === 'portals'} onClick={() => changeTab('portals')} />
-                <NavButton icon={History} label="History" active={activeTab === 'mygames'} onClick={() => changeTab('mygames')} />
-                <NavButton icon={Award} label="Wins" active={activeTab === 'payouts'} onClick={() => changeTab('payouts')} />
+                <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                <NavButton icon={Layers} label="Portals" active={activeTab === 'portals'} onClick={() => setActiveTab('portals')} />
+                <NavButton icon={History} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
+                <NavButton icon={Award} label="Wins" active={activeTab === 'wins'} onClick={() => setActiveTab('wins')} />
             </nav>
 
             {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
@@ -495,60 +530,15 @@ export default function EmpireGoldHub() {
 }
 
 function LegalModal({ type, onClose }: { type: 'privacy' | 'terms' | 'faq' | 'rules', onClose: () => void }) {
-    const titles = {
-        privacy: 'Privacy Policy',
-        terms: 'Terms of Service',
-        faq: 'F.A.Q.',
-        rules: 'Official Rules'
-    };
-
+    const titles = { privacy: 'Privacy Policy', terms: 'Terms of Service', faq: 'F.A.Q.', rules: 'Official Rules' };
     return (
         <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-xl flex flex-col p-8 pt-20 animate-in fade-in duration-300 overflow-y-auto">
-            <button onClick={onClose} className="absolute top-8 left-8 text-white/40 uppercase font-black text-[10px] flex items-center gap-2 active:scale-90 transition-transform">
+            <button onClick={onClose} className="absolute top-8 left-8 text-white/40 uppercase font-black text-[10px] flex items-center gap-2">
                 <ChevronRight className="h-4 w-4 rotate-180" /> Back
             </button>
             <h2 className="text-4xl font-black italic uppercase mb-8 mt-4">{titles[type]}</h2>
-            <div className="text-white/60 text-xs font-bold uppercase leading-relaxed space-y-6 pb-20">
-                {type === 'privacy' && (
-                    <>
-                        <p>We take your privacy seriously. This app collects minimal data required to maintain your account and process rewards.</p>
-                        <p>Data collected includes: Email address, username, and device identifiers for security purposes.</p>
-                        <p>We do not sell your personal data to third parties. Your balance is tied to your account and is synced across your devices.</p>
-                    </>
-                )}
-                {type === 'terms' && (
-                    <>
-                        <p>By using Play 'n Payday, you agree to these terms. You must be at least 18 years old to use this application.</p>
-                        <p>One account per user. Fraudulent activity, including use of automation or VPNs, will result in account termination and loss of balance.</p>
-                        <p>Rewards are not guaranteed and are subject to verification of legitimate gameplay.</p>
-                    </>
-                )}
-                {type === 'faq' && (
-                    <>
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-yellow-400 mb-1">How do I earn?</h4>
-                                <p>Open portals to play arcade games. Your balance grows the longer you play!</p>
-                            </div>
-                            <div>
-                                <h4 className="text-yellow-400 mb-1">When can I cash out?</h4>
-                                <p>You can request a reward once you reach the required milestone ($5, $10, etc.).</p>
-                            </div>
-                            <div>
-                                <h4 className="text-yellow-400 mb-1">How long does it take?</h4>
-                                <p>Payouts are typically processed within 48 business hours.</p>
-                            </div>
-                        </div>
-                    </>
-                )}
-                {type === 'rules' && (
-                    <>
-                        <p>1. Play games through the official portals to earn Gold.</p>
-                        <p>2. Royal Rewards are awarded based on active session time.</p>
-                        <p>3. Do not close the app while playing to ensure your session is recorded.</p>
-                        <p>4. Ad-supported rewards can be claimed periodically for instant balance boosts.</p>
-                    </>
-                )}
+            <div className="text-white/60 text-xs font-bold uppercase leading-relaxed space-y-4 pb-20">
+                <p>Please visit our website for full legal documentation at playnpayday.fun</p>
             </div>
         </div>
     );
@@ -566,22 +556,19 @@ function DashButton({ icon: Icon, label, color, onClick }: any) {
     )
 }
 
-function RewardCard({ title, cost, balance, icon: Icon, color }: any) {
+function RewardCard({ title, cost, balance, icon: Icon, color, onRedeem }: any) {
     const isUnlocked = balance >= cost;
     return (
-        <div className={cn("glass-card p-6 rounded-[40px] flex justify-between items-center transition-all border", isUnlocked ? "border-yellow-400/50 bg-yellow-400/10 shadow-glow-yellow" : "border-white/5 opacity-40")}>
+        <div className={cn("glass-card p-6 rounded-[40px] flex justify-between items-center transition-all border", isUnlocked ? "border-yellow-400/50 bg-yellow-400/10" : "border-white/5 opacity-40")}>
             <div className="flex items-center gap-4 text-left">
                 <div className={cn("p-3 rounded-2xl text-white shadow-lg", color)}><Icon className="h-5 w-5" /></div>
                 <div className="flex flex-col">
                     <span className="font-black text-xs uppercase tracking-tight text-white">{title}</span>
-                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{isUnlocked ? "READY TO CLAIM" : `$${cost.toFixed(2)} Required`}</span>
+                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{isUnlocked ? "READY TO CLAIM" : `${cost.toLocaleString()} JS Required`}</span>
                 </div>
             </div>
             {isUnlocked ? (
-                <button className="bg-yellow-400 text-black text-[10px] font-black px-4 py-2 rounded-xl shadow-glow-yellow animate-pulse flex items-center gap-2">
-                    <Sparkles className="h-3 w-3" />
-                    REDEEM
-                </button>
+                <button onClick={onRedeem} className="bg-yellow-400 text-black text-[10px] font-black px-4 py-2 rounded-xl shadow-glow-yellow animate-pulse">REDEEM</button>
             ) : <Lock className="h-4 w-4 text-white/20" />}
         </div>
     )
