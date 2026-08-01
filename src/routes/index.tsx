@@ -333,9 +333,6 @@ export default function PlayNPaydayHub() {
         )
     }
 
-    const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
-    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
-
     return (
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
             <AppBackground />
