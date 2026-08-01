@@ -83,39 +83,6 @@ export default function PlayNPaydayHub() {
     const [showPass, setShowPass] = useState(false)
     const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
 
-    const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
-    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
-
-    const handleAuth = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (loading) return;
-        if (!isLogin && !agreed) {
-            toast.error("Please agree to the Terms of Service.");
-            return;
-        }
-        setLoading(true);
-        try {
-            if (isLogin) {
-                await signIn(email, password);
-                toast.success("Welcome back!");
-            } else {
-                await signUp(email, password, username);
-                try {
-                    await signIn(email, password);
-                    toast.success("Welcome to Play 'n Payday!");
-                } catch {
-                    setIsLogin(true);
-                    toast.success("Account created! Please log in.");
-                }
-            }
-        } catch (error: any) {
-            console.error("Auth error:", error);
-            toast.error("Auth Failed", { description: error.message });
-        } finally {
-            setLoading(false);
-        }
-    }
-
     useEffect(() => {
         initAds();
     }, []);
@@ -245,6 +212,7 @@ export default function PlayNPaydayHub() {
     }
 
     const handlePayoutRequest = async (reward: any) => {
+        const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
         if (cashBalance < (reward.jp / 50000)) return;
         if (!confirm(`Redeem ${reward.jp.toLocaleString()} JS for a ${reward.name}?`)) return;
         try {
@@ -295,45 +263,50 @@ export default function PlayNPaydayHub() {
 
     if (!user) {
         return (
-            <div className="min-h-screen w-full bg-black flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar text-left">
+            <div className="h-screen w-full bg-black flex flex-col text-white relative">
                 <AppBackground />
-                <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
-                    Play 'n<br/><span className="text-yellow-400 font-serif">Payday</span>
-                </h1>
-                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-12 pb-20">
-                    {!isLogin && (
+                <div className="flex-1 overflow-y-auto px-8 pt-24 pb-20 no-scrollbar">
+                    <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
+                        Play 'n<br/><span className="text-yellow-400 font-serif">Payday</span>
+                    </h1>
+                    <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-12 mx-auto">
+                        {!isLogin && (
+                            <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
+                                <UserIcon className="h-5 w-5 text-white/40 mr-3" />
+                                <input type="text" placeholder="Username" autoComplete="username" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={username} onChange={e => setUsername(e.target.value)} required />
+                            </div>
+                        )}
                         <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
-                            <UserIcon className="h-5 w-5 text-white/40 mr-3" />
-                            <input type="text" placeholder="Username" autoComplete="username" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={username} onChange={e => setUsername(e.target.value)} required />
+                            <Mail className="h-5 w-5 text-white/40 mr-3" />
+                            <input type="email" placeholder="Email" autoComplete="email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
                         </div>
-                    )}
-                    <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
-                        <Mail className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="email" placeholder="Email" autoComplete="email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
-                    </div>
-                    <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
-                        <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type={showPass ? "text" : "password"} placeholder="Password" title="password" autoComplete={isLogin ? "current-password" : "new-password"} className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-12" value={password} onChange={e => setPassword(e.target.value)} required />
-                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
-                    </div>
-                    {!isLogin && (
-                        <div className="flex items-center gap-3 px-4 py-2">
-                            <input type="checkbox" id="terms" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="h-4 w-4 rounded border-white/10 bg-black/40 text-yellow-400" />
-                            <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase">I am 18+ and agree to the <button type="button" onClick={() => setShowLegal('terms')} className="text-yellow-400 underline">Terms</button> & <button type="button" onClick={() => setShowLegal('privacy')} className="text-yellow-400 underline">Privacy</button></label>
+                        <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
+                            <Lock className="h-5 w-5 text-white/40 mr-3" />
+                            <input type={showPass ? "text" : "password"} placeholder="Password" title="password" autoComplete={isLogin ? "current-password" : "new-password"} className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-12" value={password} onChange={e => setPassword(e.target.value)} required />
+                            <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
                         </div>
-                    )}
-                    <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 flex items-center justify-center gap-2">
-                        {loading && <Loader2 className="animate-spin h-5 w-5" />}
-                        {isLogin ? 'Enter Vault' : 'Join Empire'}
-                    </button>
-                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/40 font-black uppercase mt-6 underline tracking-[0.2em] relative z-10">
-                        {isLogin ? "Need an account? Sign Up" : "Back to Login"}
-                    </button>
-                </form>
+                        {!isLogin && (
+                            <div className="flex items-center gap-3 px-4 py-2">
+                                <input type="checkbox" id="terms" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="h-4 w-4 rounded border-white/10 bg-black/40 text-yellow-400" />
+                                <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase">I am 18+ and agree to the <button type="button" onClick={() => setShowLegal('terms')} className="text-yellow-400 underline">Terms</button> & <button type="button" onClick={() => setShowLegal('privacy')} className="text-yellow-400 underline">Privacy</button></label>
+                            </div>
+                        )}
+                        <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 flex items-center justify-center gap-2">
+                            {loading && <Loader2 className="animate-spin h-5 w-5" />}
+                            {isLogin ? 'Enter Vault' : 'Join Empire'}
+                        </button>
+                        <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/40 font-black uppercase mt-6 underline tracking-[0.2em] relative z-10">
+                            {isLogin ? "New? Create Account" : "Existing? Back to Login"}
+                        </button>
+                    </form>
+                </div>
                 {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
             </div>
         )
     }
+
+    const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
+    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
 
     return (
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
