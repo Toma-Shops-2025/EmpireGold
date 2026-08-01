@@ -45,15 +45,16 @@ const REWARDS = [
 
 function AppBackground() {
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
         <div
-            className="absolute inset-0 bg-repeat opacity-[0.08]"
+            className="absolute inset-0 opacity-[0.2]"
             style={{
                 backgroundImage: 'url(/bg-gold.png)',
-                backgroundSize: '300px'
+                backgroundSize: '200px',
+                backgroundRepeat: 'repeat'
             }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
     </div>
   )
 }

@@ -92,12 +92,19 @@ export async function showInterstitial(): Promise<void> {
 
 /** Show/Hide Banner Ad */
 export function setBannerVisible(visible: boolean): void {
-    if (!isNative() || !window.applovin) return;
+    if (visible) showBannerAd();
+    else hideBannerAd();
+}
 
-    if (visible) {
-        window.applovin.createBanner(BANNER_AD_UNIT_ID, "bottom_center");
-        window.applovin.showBanner(BANNER_AD_UNIT_ID);
-    } else {
-        window.applovin.hideBanner(BANNER_AD_UNIT_ID);
-    }
+/** Show Banner Ad */
+export function showBannerAd(): void {
+    if (!isNative() || !window.applovin) return;
+    window.applovin.createBanner(BANNER_AD_UNIT_ID, "bottom_center");
+    window.applovin.showBanner(BANNER_AD_UNIT_ID);
+}
+
+/** Hide Banner Ad */
+export function hideBannerAd(): void {
+    if (!isNative() || !window.applovin) return;
+    window.applovin.hideBanner(BANNER_AD_UNIT_ID);
 }
