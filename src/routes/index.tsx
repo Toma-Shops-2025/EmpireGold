@@ -395,8 +395,8 @@ export default function PlayNPaydayHub() {
                                 </div>
                             </button>
                         )}
-                        <DashButton icon={LayoutGrid} label="All Portals" color="bg-blue-600" onClick={() => setActiveTab('portals')} />
-                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => setActiveTab('history')} />
+                        <DashButton icon={LayoutGrid} label="All Portals" color="bg-blue-600" onClick={() => handleTabChange('portals')} />
+                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => handleTabChange('history')} />
                         <button onClick={handleWatchReward} disabled={isProcessing} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50 mt-4">
                             <div className="flex items-center gap-6">
                                 <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">{isProcessing ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}</div>
