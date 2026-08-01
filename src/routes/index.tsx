@@ -134,9 +134,6 @@ export default function PlayNPaydayHub() {
 
     const bgmRef = useRef<HTMLAudioElement | null>(null);
 
-    const cashBalance = profile?.cash_balance || 0;
-    const goalPct = Math.min((cashBalance / 50) * 100, 100);
-
     const playTrack = useCallback((src: string, volume: number) => {
         if (!bgmRef.current) {
             bgmRef.current = new Audio();
