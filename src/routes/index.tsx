@@ -6,7 +6,7 @@ import {
     Wallet, Gamepad2, Coins, TrendingUp, Trophy,
     Gift, Loader2, Zap, User as UserIcon, LogOut,
     ChevronRight, LayoutGrid, Award, CreditCard, Lock, Mail, ExternalLink, History,
-    PlayCircle, Sparkles, DollarSign
+    PlayCircle, Sparkles, DollarSign, Eye, EyeOff
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
@@ -316,7 +316,7 @@ export default function PlayNPaydayHub() {
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
                         <input type={showPass ? "text" : "password"} placeholder="Password" title="password" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={password} onChange={e => setPassword(e.target.value)} required />
-                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <Sparkles size={16}/> : <Lock size={16}/>}</button>
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
                     </div>
                     {!isLogin && (
                         <div className="flex items-center gap-3 px-4 py-2">
@@ -336,6 +336,9 @@ export default function PlayNPaydayHub() {
             </div>
         )
     }
+
+    const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
+    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
 
     return (
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
