@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
-import { showRewardedAd } from '@/lib/ads'
+import { initAds, showRewardedAd, showInterstitial, setBannerVisible } from '@/lib/ads'
 
 // CONFIG CONSTANTS
 const CONFIG = {
@@ -148,6 +148,26 @@ export default function PlayNPaydayHub() {
             setLoading(false);
         }
     }
+
+    useEffect(() => {
+        initAds();
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            setBannerVisible(true);
+        } else {
+            setBannerVisible(false);
+        }
+    }, [user, activeTab]);
+
+    const handleTabChange = (newTab: 'home' | 'portals' | 'history' | 'wins') => {
+        // Show an ad if moving to the Wins screen from anywhere else
+        if (newTab === 'wins' && activeTab !== 'wins') {
+            showInterstitial();
+        }
+        setActiveTab(newTab);
+    };
 
     const bgmRef = useRef<HTMLAudioElement | null>(null);
 
@@ -522,10 +542,10 @@ export default function PlayNPaydayHub() {
             </div>
 
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-12 z-[5000]">
-                <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                <NavButton icon={Layers} label="Portals" active={activeTab === 'portals'} onClick={() => setActiveTab('portals')} />
-                <NavButton icon={History} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
-                <NavButton icon={Award} label="Wins" active={activeTab === 'wins'} onClick={() => setActiveTab('wins')} />
+                <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => handleTabChange('home')} />
+                <NavButton icon={LayoutGrid} label="Portals" active={activeTab === 'portals'} onClick={() => handleTabChange('portals')} />
+                <NavButton icon={History} label="History" active={activeTab === 'history'} onClick={() => handleTabChange('history')} />
+                <NavButton icon={Award} label="Wins" active={activeTab === 'wins'} onClick={() => handleTabChange('wins')} />
             </nav>
 
             {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}

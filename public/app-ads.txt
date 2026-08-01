@@ -1,0 +1,2 @@
+# AppLovin app-ads.txt
+applovin.com, YOUR_ACCOUNT_ID, DIRECT
