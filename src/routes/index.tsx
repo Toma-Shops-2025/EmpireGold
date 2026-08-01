@@ -60,7 +60,8 @@ function AppBackground() {
 }
 
 export default function PlayNPaydayHub() {
-    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, supabase, fetchProfile } = useAuth()
+    const auth = useAuth()
+    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, supabase, fetchProfile } = auth
     const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'history' | 'wins'>('home')
     const [isProcessing, setIsProcessing] = useState(false)
     const [sessionTotal, setSessionTotal] = useState(0);
