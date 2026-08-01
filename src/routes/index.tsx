@@ -129,7 +129,6 @@ export default function PlayNPaydayHub() {
     }, [user, activeTab]);
 
     const handleTabChange = (newTab: 'home' | 'portals' | 'history' | 'wins') => {
-        // Show an ad if moving to the Wins screen from anywhere else
         if (newTab === 'wins' && activeTab !== 'wins') {
             showInterstitial();
         }
@@ -246,7 +245,7 @@ export default function PlayNPaydayHub() {
     }
 
     const handlePayoutRequest = async (reward: any) => {
-        if ((profile?.cash_balance || 0) < (reward.jp / 50000)) return; // Simple conversion logic
+        if (cashBalance < (reward.jp / 50000)) return;
         if (!confirm(`Redeem ${reward.jp.toLocaleString()} JS for a ${reward.name}?`)) return;
         try {
             const { error } = await supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: reward.name, points_cost: reward.jp, status: 'pending' });
@@ -270,7 +269,6 @@ export default function PlayNPaydayHub() {
                         .limit(10);
                     if (data) setLeaderboard(data);
 
-                    // ADMIN ONLY: Fetch pending payouts
                     if (user?.email?.includes('gmail.com') || user?.email?.includes('playnpayday.fun')) {
                         const { data: payouts } = await supabase
                             .from('payout_requests')
@@ -297,7 +295,7 @@ export default function PlayNPaydayHub() {
 
     if (!user) {
         return (
-            <div className="h-[100dvh] w-full flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar text-left">
+            <div className="min-h-screen w-full bg-black flex flex-col items-center justify-start p-8 pt-24 text-white relative overflow-y-auto no-scrollbar text-left">
                 <AppBackground />
                 <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
                     Play 'n<br/><span className="text-yellow-400 font-serif">Payday</span>
@@ -306,16 +304,16 @@ export default function PlayNPaydayHub() {
                     {!isLogin && (
                         <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
-                            <input type="text" placeholder="Username" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={username} onChange={e => setUsername(e.target.value)} required />
+                            <input type="text" placeholder="Username" autoComplete="username" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={username} onChange={e => setUsername(e.target.value)} required />
                         </div>
                     )}
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Mail className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="email" placeholder="Email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="email" placeholder="Email" autoComplete="email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
                     </div>
                     <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type={showPass ? "text" : "password"} placeholder="Password" title="password" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <input type={showPass ? "text" : "password"} placeholder="Password" title="password" autoComplete={isLogin ? "current-password" : "new-password"} className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-12" value={password} onChange={e => setPassword(e.target.value)} required />
                         <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
                     </div>
                     {!isLogin && (
@@ -336,9 +334,6 @@ export default function PlayNPaydayHub() {
             </div>
         )
     }
-
-    const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
-    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
 
     return (
         <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
