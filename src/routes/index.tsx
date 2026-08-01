@@ -44,54 +44,16 @@ const REWARDS = [
 ];
 
 function AppBackground() {
-  const particles = useMemo(() => {
-    return Array.from({ length: 25 }).map((_, i) => ({
-      id: i,
-      left: `${Math.random() * 100}%`,
-      top: `${Math.random() * 100}%`,
-      duration: 20 + Math.random() * 30,
-      delay: Math.random() * -40,
-      size: 60 + Math.random() * 80,
-      opacity: 0.1 + Math.random() * 0.2,
-      rotate: Math.random() * 360,
-    }));
-  }, []);
-
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-[#050505]">
-        <div className="absolute inset-0 overflow-hidden">
-            {particles.map((p) => (
-                <div
-                    key={p.id}
-                    className="absolute animate-float-complex"
-                    style={{
-                        left: p.left,
-                        top: p.top,
-                        animationDuration: `${p.duration}s`,
-                        animationDelay: `${p.delay}s`,
-                        opacity: p.opacity,
-                    }}
-                >
-                    <DollarSign
-                        size={p.size}
-                        className="text-yellow-600/40"
-                        style={{ transform: `rotate(${p.rotate}deg)` }}
-                    />
-                </div>
-            ))}
-        </div>
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/40 to-black" />
-        <style>{`
-            @keyframes float-complex {
-                0% { transform: translate(0, 0) rotate(0deg); }
-                33% { transform: translate(-30px, 30px) rotate(120deg); }
-                66% { transform: translate(30px, -20px) rotate(240deg); }
-                100% { transform: translate(0, 0) rotate(360deg); }
-            }
-            .animate-float-complex {
-                animation: float-complex infinite linear;
-            }
-        `}</style>
+    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div
+            className="absolute inset-0 bg-repeat opacity-[0.08]"
+            style={{
+                backgroundImage: 'url(/bg-gold.png)',
+                backgroundSize: '300px'
+            }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black" />
     </div>
   )
 }
