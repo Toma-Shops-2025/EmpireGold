@@ -109,5 +109,16 @@ export function useAuth() {
 
   const signOut = () => supabase.auth.signOut();
 
-  return { user, profile, loading, signIn, signUp, signOut, addCash, fetchProfile };
+  const deleteAccount = async () => {
+      if (!user) return;
+      try {
+          await supabase.from('profiles').delete().eq('id', user.id);
+          await supabase.auth.signOut();
+          toast.success("Account deleted successfully");
+      } catch (e: any) {
+          toast.error("Deletion failed", { description: e.message });
+      }
+  };
+
+  return { user, profile, loading, signIn, signUp, signOut, deleteAccount, addCash, fetchProfile, supabase };
 }

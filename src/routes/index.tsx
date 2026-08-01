@@ -509,9 +509,13 @@ export default function PlayNPaydayHub() {
 
                         <div className="flex flex-col items-center gap-4 text-center mt-12 pb-20">
                             <span className="text-sm font-black uppercase italic text-yellow-400/60">{profile?.username || 'Empire Member'}</span>
-                            <button onClick={() => window.location.assign('mailto:support@playnpayday.fun')} className="text-yellow-400 text-[10px] font-black uppercase tracking-widest border border-yellow-400/20 px-8 py-3 rounded-xl">Contact Support</button>
-                            <button onClick={signOut} className="text-white/20 text-[10px] font-black uppercase tracking-widest mt-4">Log Out</button>
-                            <button onClick={() => { if(confirm("Permanently delete account?")) signOut(); }} className="text-red-500/20 text-[10px] font-black uppercase tracking-widest mt-2">Delete Account</button>
+                            <button onClick={() => window.location.assign('mailto:support@playnpayday.fun')} className="text-yellow-400 text-[10px] font-black uppercase tracking-widest border border-yellow-400/20 px-8 py-4 rounded-2xl w-full max-w-[240px]">Contact Support</button>
+                            <button onClick={auth.signOut} className="text-white/20 text-[10px] font-black uppercase tracking-widest mt-4">Log Out</button>
+                            <button onClick={async () => {
+                                if(confirm("PERMANENTLY DELETE ACCOUNT?\n\nThis will erase all your earnings and progress. This cannot be undone.")) {
+                                    await auth.deleteAccount();
+                                }
+                            }} className="text-red-500/40 text-[10px] font-black uppercase tracking-widest mt-4 border border-red-500/10 px-6 py-2 rounded-lg">Delete Account</button>
                         </div>
                     </div>
                 )}
@@ -538,7 +542,20 @@ function LegalModal({ type, onClose }: { type: 'privacy' | 'terms' | 'faq' | 'ru
             </button>
             <h2 className="text-4xl font-black italic uppercase mb-8 mt-4">{titles[type]}</h2>
             <div className="text-white/60 text-xs font-bold uppercase leading-relaxed space-y-4 pb-20">
-                <p>Please visit our website for full legal documentation at playnpayday.fun</p>
+                {type === 'privacy' && (
+                    <>
+                        <p>We collect your email and username to manage your rewards and account security.</p>
+                        <p className="text-yellow-400">ACCOUNT DELETION:</p>
+                        <p>You may delete your account at any time using the "Delete Account" button at the bottom of the Wins tab. Alternatively, you can email us at <span className="text-white">support@playnpayday.fun</span> to request full data removal.</p>
+                    </>
+                )}
+                {type === 'terms' && (
+                    <p>By using Play 'n Payday, you agree to our terms. Users must be 18+ to redeem rewards. Fraudulent activity results in immediate bans.</p>
+                )}
+                {type === 'rules' && (
+                    <p>1. Play games to earn balance. 2. Payouts start at $5.00. 3. One account per person. 4. VPNs are strictly prohibited.</p>
+                )}
+                <p className="pt-4 border-t border-white/10">For more details, visit playnpayday.fun</p>
             </div>
         </div>
     );
