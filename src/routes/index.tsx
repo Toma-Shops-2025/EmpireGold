@@ -83,6 +83,9 @@ export default function PlayNPaydayHub() {
     const [showPass, setShowPass] = useState(false)
     const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
 
+    const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
+    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
+
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         if (loading) return;
