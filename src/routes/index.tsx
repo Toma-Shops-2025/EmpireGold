@@ -299,6 +299,7 @@ export default function PlayNPaydayHub() {
                             {isLogin ? "New? Create Account" : "Existing? Back to Login"}
                         </button>
                     </form>
+                    <p className="text-center text-[8px] text-white/10 mt-8 uppercase font-bold tracking-tighter">Build v2.1.0-master</p>
                 </div>
                 {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
             </div>

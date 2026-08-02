@@ -24,6 +24,9 @@ Step "Building web app"
 npm run build
 
 Step "Capacitor sync (Android)"
+if (Test-Path "android/app/src/main/assets/public") {
+    Remove-Item "android/app/src/main/assets/public" -Recurse -Force
+}
 npx cap sync android
 
 Step "Bumping versionCode..."
