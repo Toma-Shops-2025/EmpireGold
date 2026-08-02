@@ -12,14 +12,6 @@ import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
 import { initAds, showRewardedAd, showInterstitial, setBannerVisible } from '@/lib/ads'
 
-// CONFIG CONSTANTS
-const CONFIG = {
-    POINTS_PER_DAUB: 10,
-    BINGO_BONUS: 500,
-    X_PATTERN_BONUS: 1000,
-    ROUND_TIME_LIMIT: 120,
-};
-
 // THE EMPIRE GOLD PROVIDERS
 const PROVIDERS = [
     { id: 'poki', name: 'Poki Arcade', desc: 'The biggest web arcade', url: 'https://poki.com', color: 'bg-blue-600', icon: Gamepad2 },
@@ -61,7 +53,7 @@ function AppBackground() {
 
 export default function PlayNPaydayHub() {
     const auth = useAuth()
-    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, supabase, fetchProfile } = auth
+    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, supabase } = auth
     const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'history' | 'wins'>('home')
     const [isProcessing, setIsProcessing] = useState(false)
     const [sessionTotal, setSessionTotal] = useState(0);
@@ -102,9 +94,40 @@ export default function PlayNPaydayHub() {
         setActiveTab(newTab);
     };
 
+    const handleAuth = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (loading) return;
+        if (!isLogin && !agreed) {
+            toast.error("Please agree to the Terms of Service.");
+            return;
+        }
+        setLoading(true);
+        try {
+            if (isLogin) {
+                await signIn(email, password);
+                toast.success("Welcome back!");
+            } else {
+                await signUp(email, password, username);
+                try {
+                    await signIn(email, password);
+                    toast.success("Welcome to Play 'n Payday!");
+                } catch {
+                    setIsLogin(true);
+                    toast.success("Account created! Please log in.");
+                }
+            }
+        } catch (error: any) {
+            console.error("Auth error:", error);
+            toast.error("Auth Failed", { description: error.message });
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const bgmRef = useRef<HTMLAudioElement | null>(null);
 
     const playTrack = useCallback((src: string, volume: number) => {
+        if (typeof Audio === 'undefined') return;
         if (!bgmRef.current) {
             bgmRef.current = new Audio();
             bgmRef.current.loop = true;
@@ -133,17 +156,12 @@ export default function PlayNPaydayHub() {
     useEffect(() => {
         const handleFirstInteraction = () => {
             setHasInteracted(true);
-            window.removeEventListener('touchstart', handleFirstInteraction);
-            window.removeEventListener('mousedown', handleFirstInteraction);
-            window.removeEventListener('click', handleFirstInteraction);
         };
-        window.addEventListener('touchstart', handleFirstInteraction);
-        window.addEventListener('mousedown', handleFirstInteraction);
-        window.addEventListener('click', handleFirstInteraction);
+        window.addEventListener('touchstart', handleFirstInteraction, { once: true });
+        window.addEventListener('mousedown', handleFirstInteraction, { once: true });
         return () => {
             window.removeEventListener('touchstart', handleFirstInteraction);
             window.removeEventListener('mousedown', handleFirstInteraction);
-            window.removeEventListener('click', handleFirstInteraction);
         };
     }, []);
 
@@ -212,30 +230,33 @@ export default function PlayNPaydayHub() {
     }
 
     const handlePayoutRequest = async (reward: any) => {
-        const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
-        if (cashBalance < (reward.jp / 50000)) return;
-        if (!confirm(`Redeem ${reward.jp.toLocaleString()} JS for a ${reward.name}?`)) return;
+        const currentBalance = parseFloat(profile?.cash_balance?.toString() || "0");
+        if (currentBalance < (reward.jp / 50000)) {
+            toast.error("Insufficient Balance");
+            return;
+        }
+
         try {
             const { error } = await supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: reward.name, points_cost: reward.jp, status: 'pending' });
             if (error) throw error;
             await addCash(-(reward.jp / 50000));
             toast.success("Redemption Submitted!", {
-                description: "Check your email for instructions. Payouts are processed within 24-48 hours.",
+                description: "Payouts are processed within 24-48 hours.",
                 duration: 6000
             });
-        } catch (e: any) { alert(e.message); }
+        } catch (e: any) { toast.error(e.message); }
     }
 
     useEffect(() => {
-        if (activeTab === 'wins' && supabase) {
-            const fetchL = async () => {
+        if (activeTab === 'wins' && supabase && user) {
+            const fetchData = async () => {
                 try {
-                    const { data } = await supabase
+                    const { data: lData } = await supabase
                         .from('profiles')
                         .select('username, cash_balance, total_earned')
                         .order('total_earned', { ascending: false })
                         .limit(10);
-                    if (data) setLeaderboard(data);
+                    if (lData) setLeaderboard(lData);
 
                     if (user?.email?.includes('gmail.com') || user?.email?.includes('playnpayday.fun')) {
                         const { data: payouts } = await supabase
@@ -246,10 +267,10 @@ export default function PlayNPaydayHub() {
                         if (payouts) setAdminPayouts(payouts);
                     }
                 } catch (e) {
-                    console.warn("Leaderboard error", e);
+                    console.warn("Data fetch error", e);
                 }
             };
-            fetchL();
+            fetchData();
         }
     }, [activeTab, supabase, user]);
 
@@ -263,7 +284,7 @@ export default function PlayNPaydayHub() {
 
     if (!user) {
         return (
-            <div className="h-screen w-full bg-black flex flex-col text-white relative">
+            <div className="min-h-screen w-full bg-black flex flex-col text-white relative">
                 <AppBackground />
                 <div className="flex-1 overflow-y-auto px-8 pt-24 pb-20 no-scrollbar">
                     <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
@@ -299,7 +320,7 @@ export default function PlayNPaydayHub() {
                             {isLogin ? "New? Create Account" : "Existing? Back to Login"}
                         </button>
                     </form>
-                    <p className="text-center text-[8px] text-white/10 mt-8 uppercase font-bold tracking-tighter">Build v2.1.0-master</p>
+                    <p className="text-center text-[8px] text-white/10 mt-8 uppercase font-bold tracking-tighter">Build v2.1.8-master</p>
                 </div>
                 {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
             </div>
