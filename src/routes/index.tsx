@@ -537,7 +537,7 @@ function RewardCard({ title, cost, balance, icon: Icon, color, onRedeem }: any) 
                 <div className={cn("p-3 rounded-2xl text-white shadow-lg", color)}><Icon className="h-5 w-5" /></div>
                 <div className="flex flex-col">
                     <span className="font-black text-xs uppercase tracking-tight text-white">{title}</span>
-                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{isUnlocked ? "READY TO CLAIM" : `${cost.toLocaleString()} JS Required`}</span>
+                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{isUnlocked ? "READY TO CLAIM" : "LOCKED"}</span>
                 </div>
             </div>
             {isUnlocked ? (
