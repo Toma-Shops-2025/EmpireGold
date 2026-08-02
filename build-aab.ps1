@@ -23,6 +23,9 @@ npm install
 Step "Building web app"
 npm run build
 
+Step "Regenerating Android launcher icon + splash from resources/"
+npm run assets:generate
+
 Step "Capacitor sync (Android)"
 if (Test-Path "android/app/src/main/assets/public") {
     Remove-Item "android/app/src/main/assets/public" -Recurse -Force
