@@ -59,8 +59,6 @@ export default function PlayNPaydayHub() {
     const [showPass, setShowPass] = useState(false)
     const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
 
-    useEffect(() => { initAds(); }, []);
-
     useEffect(() => {
         if (user) setBannerVisible(true);
         else setBannerVisible(false);
