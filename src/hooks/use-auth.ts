@@ -58,11 +58,15 @@ export function useAuth() {
     if (!user) return;
     const val = parseFloat(amount.toFixed(4));
     try {
-        const { error: rpcError } = await supabase.rpc('increment_cash_balance', { user_id: user.id, amount: val });
+        // UNIFIED FUNCTION NAME
+        const { error: rpcError } = await supabase.rpc('claim_game_reward', {
+            p_game: 'playnpayday_action',
+            p_score: 0,
+            p_reward_est: val
+        });
+
         if (rpcError) {
-            const { data: current } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
-            const newTotal = parseFloat(((current?.cash_balance || 0) + val).toFixed(4));
-            await supabase.from('profiles').update({ cash_balance: newTotal }).eq('id', user.id);
+            console.error("Database update failed:", rpcError);
         }
     } catch (e: any) { console.error(e); }
   }, [user]);
