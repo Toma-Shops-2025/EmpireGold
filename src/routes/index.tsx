@@ -6,7 +6,7 @@ import {
     Wallet, Gamepad2, Coins, TrendingUp, Trophy,
     Gift, Loader2, Zap, User as UserIcon, LogOut,
     ChevronRight, LayoutGrid, Award, CreditCard, Lock, Mail, ExternalLink, History,
-    PlayCircle, Sparkles, DollarSign, Eye, EyeOff
+    PlayCircle, Sparkles, DollarSign, Eye, EyeOff, Info, ArrowUpRight, ShieldCheck
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
@@ -14,36 +14,34 @@ import { initAds, showRewardedAd, showInterstitial, setBannerVisible } from '@/l
 
 // THE EMPIRE GOLD PROVIDERS
 const PROVIDERS = [
-    { id: 'poki', name: 'Poki Arcade', desc: 'The biggest web arcade', url: 'https://poki.com', color: 'bg-blue-600', icon: Gamepad2 },
-    { id: 'crazy', name: 'CrazyGames', desc: 'Top action & strategy', url: 'https://www.crazygames.com', color: 'bg-purple-600', icon: Zap },
-    { id: 'gdist', name: 'GameDistro', desc: 'Premium HTML5 library', url: 'https://gamedistribution.com', color: 'bg-orange-600', icon: LayoutGrid },
-    { id: 'y8', name: 'Y8 Games', desc: 'Classic arcade hits', url: 'https://www.y8.com', color: 'bg-emerald-600', icon: Trophy },
+    { id: 'poki', name: 'POKI ARCADE', desc: 'The biggest web arcade', url: 'https://poki.com', color: 'from-blue-600 to-blue-900', icon: Gamepad2, bonus: "POPULAR" },
+    { id: 'crazy', name: 'CRAZY GAMES', desc: 'Top action & strategy', url: 'https://www.crazygames.com', color: 'from-purple-600 to-purple-900', icon: Zap, bonus: "HOT" },
+    { id: 'gdist', name: 'GAME DISTRO', desc: 'Premium HTML5 library', url: 'https://gamedistribution.com', color: 'from-orange-600 to-orange-900', icon: LayoutGrid, bonus: "ELITE" },
+    { id: 'y8', name: 'Y8 GAMES', desc: 'Classic arcade hits', url: 'https://www.y8.com', color: 'from-emerald-600 to-emerald-900', icon: Trophy, bonus: "LEGACY" },
 ];
 
 const REWARDS = [
-    { id: 'v5', name: '$5 Visa Card', jp: 250000, type: 'Visa' },
-    { id: 'a5', name: '$5 Amazon Gift', jp: 250000, type: 'Amazon' },
-    { id: 'p5', name: '$5 PayPal Cash', jp: 250000, type: 'PayPal' },
-    { id: 'v10', name: '$10 Visa Card', jp: 500000, type: 'Visa' },
-    { id: 'a10', name: '$10 Amazon Gift', jp: 500000, type: 'Amazon' },
-    { id: 'p10', name: '$10 PayPal Cash', jp: 500000, type: 'PayPal' },
-    { id: 'v25', name: '$25 Visa Card', jp: 1250000, type: 'Visa' },
-    { id: 'a25', name: '$25 Amazon Gift', jp: 1250000, type: 'Amazon' },
-    { id: 'p25', name: '$25 PayPal Cash', jp: 1250000, type: 'PayPal' },
-    { id: 'v50', name: '$50 Visa Card', jp: 2500000, type: 'Visa' },
-    { id: 'a50', name: '$50 Amazon Gift', jp: 2500000, type: 'Amazon' },
-    { id: 'p50', name: '$50 PayPal Cash', jp: 2500000, type: 'PayPal' },
+    { id: 'v5', name: '$5 Visa Card', cost: 5.00, type: 'Visa' },
+    { id: 'a5', name: '$5 Amazon Gift', cost: 5.00, type: 'Amazon' },
+    { id: 'p5', name: '$5 PayPal Cash', cost: 5.00, type: 'PayPal' },
+    { id: 'v10', name: '$10 Visa Card', cost: 10.00, type: 'Visa' },
+    { id: 'a10', name: '$10 Amazon Gift', cost: 10.00, type: 'Amazon' },
+    { id: 'p10', name: '$10 PayPal Cash', cost: 10.00, type: 'PayPal' },
+    { id: 'v25', name: '$25 Visa Card', cost: 25.00, type: 'Visa' },
+    { id: 'a25', name: '$25 Amazon Gift', cost: 25.00, type: 'Amazon' },
+    { id: 'p25', name: '$25 PayPal Cash', cost: 25.00, type: 'PayPal' },
 ];
 
 function AppBackground() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
         <div
-            className="absolute inset-0 opacity-[0.2]"
+            className="absolute inset-0 opacity-[0.3]"
             style={{
                 backgroundImage: 'url(/bg-gold.png)',
-                backgroundSize: '200px',
-                backgroundRepeat: 'repeat'
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
             }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
@@ -53,7 +51,7 @@ function AppBackground() {
 
 export default function PlayNPaydayHub() {
     const auth = useAuth()
-    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, supabase } = auth
+    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, fetchProfile, supabase } = auth
     const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'history' | 'wins'>('home')
     const [isProcessing, setIsProcessing] = useState(false)
     const [sessionTotal, setSessionTotal] = useState(0);
@@ -62,7 +60,7 @@ export default function PlayNPaydayHub() {
     const [leaderboard, setLeaderboard] = useState<any[]>([]);
     const [adminPayouts, setAdminPayouts] = useState<any[]>([]);
     const [history, setHistory] = useState<Record<string, number>>(() => {
-        const saved = localStorage.getItem('pnp_history_v1');
+        const saved = localStorage.getItem('pnp_history_v2');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
     });
 
@@ -108,16 +106,9 @@ export default function PlayNPaydayHub() {
                 toast.success("Welcome back!");
             } else {
                 await signUp(email, password, username);
-                try {
-                    await signIn(email, password);
-                    toast.success("Welcome to Play 'n Payday!");
-                } catch {
-                    setIsLogin(true);
-                    toast.success("Account created! Please log in.");
-                }
+                toast.success("Account created!");
             }
         } catch (error: any) {
-            console.error("Auth error:", error);
             toast.error("Auth Failed", { description: error.message });
         } finally {
             setLoading(false);
@@ -126,43 +117,29 @@ export default function PlayNPaydayHub() {
 
     const bgmRef = useRef<HTMLAudioElement | null>(null);
 
-    const playTrack = useCallback((src: string, volume: number) => {
-        if (typeof Audio === 'undefined') return;
-        if (!bgmRef.current) {
-            bgmRef.current = new Audio();
-            bgmRef.current.loop = true;
-        }
-        const currentFullUrl = window.location.origin + src;
-        if (bgmRef.current.src !== currentFullUrl) {
-            bgmRef.current.src = src;
-        }
-        bgmRef.current.volume = volume;
-        if (hasInteracted) {
+    useEffect(() => {
+        if (user && hasInteracted) {
+            if (!bgmRef.current) {
+                bgmRef.current = new Audio('/audio/promo.MP3');
+                bgmRef.current.loop = true;
+                bgmRef.current.volume = 0.15;
+            }
+            if (activeTab === 'wins') {
+                bgmRef.current.src = '/audio/vault.MP3';
+            } else {
+                bgmRef.current.src = '/audio/promo.MP3';
+            }
             bgmRef.current.play().catch(e => console.log("Audio play blocked:", e));
         }
-    }, [hasInteracted]);
-
-    useEffect(() => {
-        if (!user) return;
-        if (gameStartTime) {
-            bgmRef.current?.pause();
-        } else if (activeTab === 'wins') {
-            playTrack('/audio/vault.MP3', 0.15);
-        } else {
-            playTrack('/audio/promo.MP3', 0.1);
-        }
-    }, [activeTab, gameStartTime, user, playTrack]);
-
-    useEffect(() => {
-        const handleFirstInteraction = () => {
-            setHasInteracted(true);
-        };
-        window.addEventListener('touchstart', handleFirstInteraction, { once: true });
-        window.addEventListener('mousedown', handleFirstInteraction, { once: true });
         return () => {
-            window.removeEventListener('touchstart', handleFirstInteraction);
-            window.removeEventListener('mousedown', handleFirstInteraction);
+            bgmRef.current?.pause();
         };
+    }, [activeTab, user, hasInteracted]);
+
+    useEffect(() => {
+        const handleFirstInteraction = () => setHasInteracted(true);
+        window.addEventListener('click', handleFirstInteraction, { once: true });
+        return () => window.removeEventListener('click', handleFirstInteraction);
     }, []);
 
     const lastPlayed = useMemo(() => {
@@ -178,15 +155,18 @@ export default function PlayNPaydayHub() {
             const start = parseInt(startTime);
             const now = Date.now();
             const elapsedMinutes = Math.floor((now - start) / 60000);
-            if (elapsedMinutes < 1) return;
-            const reward = 0.05 + (elapsedMinutes * 0.02);
-            localStorage.removeItem('pnp_session_start');
-            setGameStartTime(null);
-            setSessionTotal(prev => prev + reward);
-            await addCash(reward);
-            toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { description: `Session: ${elapsedMinutes} min`, icon: '👑' });
+            if (elapsedMinutes >= 1) {
+                const reward = 0.05 + (elapsedMinutes * 0.02);
+                localStorage.removeItem('pnp_session_start');
+                setGameStartTime(null);
+                setSessionTotal(prev => prev + reward);
+                await addCash(reward);
+                toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { icon: '👑' });
+            }
+        } else if (user) {
+            fetchProfile(user.id);
         }
-    }, [user, addCash]);
+    }, [user, addCash, fetchProfile]);
 
     useEffect(() => {
         if (!user) return;
@@ -199,9 +179,10 @@ export default function PlayNPaydayHub() {
     const openPortal = async (portalId: string, url: string) => {
         const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
-        localStorage.setItem('pnp_history_v1', JSON.stringify(newHistory));
+        localStorage.setItem('pnp_history_v2', JSON.stringify(newHistory));
         localStorage.setItem('pnp_session_start', Date.now().toString());
         setGameStartTime(Date.now());
+        showInterstitial();
         if (Capacitor.isNativePlatform()) {
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
@@ -212,15 +193,12 @@ export default function PlayNPaydayHub() {
     const handleWatchReward = async () => {
         if (isProcessing) return;
         setIsProcessing(true);
-        toast.info("Accessing sponsor network...");
         try {
             const ad = await showRewardedAd();
             if (ad.success) {
                 await addCash(0.10);
                 setSessionTotal(prev => prev + 0.10);
                 toast.success("Cash Earned!", { description: "+$0.10 added to your vault." });
-            } else {
-                toast.error("Ad not ready", { description: "Please try again in a moment." });
             }
         } catch (e) {
             console.error("Ad error", e);
@@ -231,18 +209,17 @@ export default function PlayNPaydayHub() {
 
     const handlePayoutRequest = async (reward: any) => {
         const currentBalance = parseFloat(profile?.cash_balance?.toString() || "0");
-        if (currentBalance < (reward.jp / 50000)) {
+        if (currentBalance < reward.cost) {
             toast.error("Insufficient Balance");
             return;
         }
 
         try {
-            const { error } = await supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: reward.name, points_cost: reward.jp, status: 'pending' });
+            const { error } = await supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: reward.name, points_cost: reward.cost * 1000, status: 'pending' });
             if (error) throw error;
-            await addCash(-(reward.jp / 50000));
+            await addCash(-reward.cost);
             toast.success("Redemption Submitted!", {
                 description: "Payouts are processed within 24-48 hours.",
-                duration: 6000
             });
         } catch (e: any) { toast.error(e.message); }
     }
@@ -284,148 +261,133 @@ export default function PlayNPaydayHub() {
 
     if (!user) {
         return (
-            <div className="min-h-screen w-full bg-black flex flex-col text-white relative">
+            <div className="min-h-screen w-full bg-black flex flex-col text-white relative p-8 justify-center">
                 <AppBackground />
-                <div className="flex-1 overflow-y-auto px-8 pt-24 pb-20 no-scrollbar">
-                    <h1 className="text-6xl font-black italic mb-2 tracking-tighter uppercase text-center leading-none relative z-10">
-                        Play 'n<br/><span className="text-yellow-400 font-serif">Payday</span>
-                    </h1>
-                    <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mt-12 mx-auto">
-                        {!isLogin && (
-                            <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
-                                <UserIcon className="h-5 w-5 text-white/40 mr-3" />
-                                <input type="text" placeholder="Username" autoComplete="username" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={username} onChange={e => setUsername(e.target.value)} required />
-                            </div>
-                        )}
-                        <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
-                            <Mail className="h-5 w-5 text-white/40 mr-3" />
-                            <input type="email" placeholder="Email" autoComplete="email" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20" value={email} onChange={e => setEmail(e.target.value)} required />
-                        </div>
-                        <div className="bg-black/60 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
-                            <Lock className="h-5 w-5 text-white/40 mr-3" />
-                            <input type={showPass ? "text" : "password"} placeholder="Password" title="password" autoComplete={isLogin ? "current-password" : "new-password"} className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-12" value={password} onChange={e => setPassword(e.target.value)} required />
-                            <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
-                        </div>
-                        {!isLogin && (
-                            <div className="flex items-center gap-3 px-4 py-2">
-                                <input type="checkbox" id="terms" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="h-4 w-4 rounded border-white/10 bg-black/40 text-yellow-400" />
-                                <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase">I am 18+ and agree to the <button type="button" onClick={() => setShowLegal('terms')} className="text-yellow-400 underline">Terms</button> & <button type="button" onClick={() => setShowLegal('privacy')} className="text-yellow-400 underline">Privacy</button></label>
-                            </div>
-                        )}
-                        <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 flex items-center justify-center gap-2">
-                            {loading && <Loader2 className="animate-spin h-5 w-5" />}
-                            {isLogin ? 'Enter Vault' : 'Join Empire'}
-                        </button>
-                        <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/40 font-black uppercase mt-6 underline tracking-[0.2em] relative z-10">
-                            {isLogin ? "New? Create Account" : "Existing? Back to Login"}
-                        </button>
-                    </form>
-                    <p className="text-center text-[8px] text-white/10 mt-8 uppercase font-bold tracking-tighter">Build v2.1.8-master</p>
+                <div className="relative z-10 text-center space-y-2 mb-12">
+                    <h1 className="text-6xl font-black italic tracking-tighter uppercase leading-none">PLAY 'N<br/><span className="text-yellow-400">PAYDAY</span></h1>
+                    <p className="text-xs font-bold tracking-[0.3em] text-white/40 uppercase italic">The Empire Awaits</p>
                 </div>
-                {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
+
+                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mx-auto text-left">
+                    {!isLogin && (
+                        <div className="bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
+                            <UserIcon className="h-5 w-5 text-white/40 mr-3" />
+                            <input type="text" placeholder="EMPIRE NAME" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 uppercase" value={username} onChange={e => setUsername(e.target.value)} required />
+                        </div>
+                    )}
+                    <div className="bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
+                        <Mail className="h-5 w-5 text-white/40 mr-3" />
+                        <input type="email" placeholder="EMAIL ADDRESS" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 uppercase" value={email} onChange={e => setEmail(e.target.value)} required />
+                    </div>
+                    <div className="bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
+                        <Lock className="h-5 w-5 text-white/40 mr-3" />
+                        <input type={showPass ? "text" : "password"} placeholder="PASSWORD" handle-auto-focus="false" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-12" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
+                    </div>
+                    {!isLogin && (
+                        <div className="flex items-center gap-3 px-4 py-2">
+                            <input type="checkbox" id="terms" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="h-4 w-4 rounded border-white/10 bg-black/40 text-yellow-400" />
+                            <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase italic leading-tight">I am 18+ and agree to the Empire Code</label>
+                        </div>
+                    )}
+                    <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 flex items-center justify-center gap-2 italic">
+                        {loading && <Loader2 className="animate-spin h-5 w-5" />}
+                        {isLogin ? 'Enter Empire' : 'Join Empire'}
+                    </button>
+                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/40 font-black uppercase mt-6 underline tracking-[0.2em] relative z-10 italic">
+                        {isLogin ? "New Recruit? Sign Up" : "Back to Login"}
+                    </button>
+                </form>
             </div>
         )
     }
 
     const cashBalance = parseFloat(profile?.cash_balance?.toString() || "0");
-    const goalPct = Math.min(100, Math.max(0, (cashBalance / 50) * 100));
 
     return (
-        <div className="h-screen w-full text-white flex flex-col overflow-hidden font-sans relative bg-black">
+        <div className="h-screen w-full text-white flex flex-col overflow-y-auto font-sans relative bg-black no-scrollbar pb-32">
             <AppBackground />
-            <div className="pt-12 pb-6 px-6 rounded-b-[40px] shadow-2xl relative overflow-hidden glass-panel z-10 border-b border-white/5">
-                <div className="flex justify-between items-start mb-6 relative z-10">
-                    <div className="space-y-0.5 text-left">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Payday Balance</span>
-                            <span className="text-[7px] bg-yellow-400/10 text-yellow-400 px-1 py-0.5 rounded border border-yellow-400/20 font-bold">V2.0</span>
+
+            <header className="px-6 pt-12 pb-4 flex justify-between items-center z-20 relative">
+                <div className="flex items-center gap-3 text-left">
+                    <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-amber-600 p-0.5 shadow-[0_0_20px_rgba(250,204,21,0.3)]">
+                        <div className="h-full w-full bg-black rounded-[14px] flex items-center justify-center overflow-hidden">
+                            <img src="/logo.png" className="w-10 h-10 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+                            <Sparkles className="w-6 h-6 text-yellow-400 absolute opacity-20" />
                         </div>
-                        <div className="flex items-center gap-3">
-                            <div className="bg-yellow-400/20 p-1.5 rounded-lg border border-yellow-400/10">
-                                <Coins className="h-5 w-5 text-yellow-400 drop-shadow-glow" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-3xl font-black italic tracking-tighter">${cashBalance.toFixed(2)}</span>
-                                {sessionTotal > 0 && <span className="text-[8px] text-green-400 font-bold uppercase">Session: +${sessionTotal.toFixed(2)}</span>}
-                            </div>
-                        </div>
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-black italic tracking-tighter text-white leading-none uppercase">PLAY 'N<span className="text-yellow-400 not-italic tracking-normal">PAYDAY</span></h1>
+                        <p className="text-[9px] text-white/40 uppercase tracking-[0.3em] font-bold mt-1 flex items-center gap-1 italic">
+                            <ShieldCheck className="w-2.5 h-2.5 text-yellow-400" /> Gold Verified
+                        </p>
                     </div>
                 </div>
 
-                <div className="space-y-3 relative z-10 px-1">
-                    <div className="flex justify-between text-[9px] font-black uppercase italic tracking-wider text-left">
-                        <span className="opacity-40">Milestone Progress</span>
-                        <span className="text-yellow-400">{goalPct.toFixed(0)}% to $50.00</span>
-                    </div>
-                    <div className="relative pt-3 pb-1">
-                        <div className="h-3 w-full bg-black/40 rounded-full overflow-hidden p-0.5 border border-white/5 shadow-inner">
-                            <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-400 rounded-full shadow-[0_0_10px_rgba(250,204,21,0.3)] transition-all duration-1000 ease-out" style={{ width: `${goalPct}%` }} />
-                        </div>
-                        <div className="absolute top-0 inset-x-0 flex justify-between px-2 text-[7px] font-black text-white/40 uppercase">
-                            <span>$0</span>
-                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$5</div>
-                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$10</div>
-                            <div className="flex flex-col items-center"><div className="h-1.5 w-px bg-white/20 mb-0.5" />$25</div>
-                            <span>$50</span>
-                        </div>
-                    </div>
+                <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2 shadow-2xl">
+                    <Coins className="w-4 h-4 text-yellow-400" />
+                    <span className="font-black text-lg tabular-nums tracking-tighter text-white italic">${cashBalance.toFixed(2)}</span>
                 </div>
-            </div>
+            </header>
 
-            <div className="flex-1 overflow-y-auto px-6 pt-8 pb-48 no-scrollbar relative z-10 text-left">
+            <main className="flex-1 px-4 py-4 space-y-8 relative z-10 text-left">
                 {activeTab === 'home' && (
-                    <div className="space-y-4">
-                        {lastPlayed && (
-                            <button onClick={() => openPortal(lastPlayed.id, lastPlayed.url)} className="w-full bg-gradient-to-r from-yellow-400/20 to-transparent p-[1px] rounded-[35px] group">
-                                <div className="bg-black/60 backdrop-blur-xl p-5 rounded-[34px] flex items-center justify-between border border-white/5 group-active:scale-95 transition-all">
-                                    <div className="flex items-center gap-4">
-                                        <div className={cn("p-3 rounded-2xl text-white", lastPlayed.color)}><PlayCircle className="h-6 w-6" /></div>
-                                        <div className="flex flex-col text-left text-white">
-                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Continue Playing</span>
-                                            <span className="text-sm font-black uppercase italic">{lastPlayed.name}</span>
+                    <>
+                        <section>
+                            <div className="flex items-center justify-between px-2 mb-4">
+                                <h3 className="text-xs font-black uppercase tracking-widest text-yellow-400 italic">Empire Zones</h3>
+                                <div className="h-px flex-1 mx-4 bg-white/10" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                {PROVIDERS.map((p) => (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => openPortal(p.id, p.url)}
+                                        className="relative h-32 rounded-[2rem] overflow-hidden border border-white/5 bg-gradient-to-br from-white/5 to-transparent p-5 flex flex-col justify-between active:scale-95 transition-all group text-left shadow-xl"
+                                    >
+                                        <div className={cn("absolute inset-0 opacity-20 bg-gradient-to-br", p.color)} />
+                                        <div className="flex justify-between items-start z-10">
+                                            <p.icon className={cn("w-7 h-7 text-white")} />
+                                            <span className="text-[8px] font-black bg-yellow-400/20 px-2 py-0.5 rounded-full text-yellow-400 border border-yellow-400/20">{p.bonus}</span>
                                         </div>
-                                    </div>
-                                    <ChevronRight className="h-5 w-5 text-yellow-400" />
-                                </div>
-                            </button>
-                        )}
-                        <DashButton icon={LayoutGrid} label="All Portals" color="bg-blue-600" onClick={() => handleTabChange('portals')} />
-                        <DashButton icon={History} label="History" color="bg-purple-600" onClick={() => handleTabChange('history')} />
-                        <button onClick={handleWatchReward} disabled={isProcessing} className="w-full glass-card p-8 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-yellow-400/20 bg-yellow-400/5 shadow-glow-yellow disabled:opacity-50 mt-4">
+                                        <div className="z-10">
+                                            <h4 className="text-sm font-black uppercase italic leading-none tracking-tight">{p.name}</h4>
+                                            <p className="text-[9px] text-white/40 mt-1 font-bold">{p.desc}</p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <button onClick={handleWatchReward} disabled={isProcessing} className="w-full bg-white/5 border border-white/10 p-8 rounded-[3rem] flex items-center justify-between active:scale-95 transition-all group backdrop-blur-xl">
                             <div className="flex items-center gap-6">
-                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">{isProcessing ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}</div>
+                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl shadow-yellow-400/20">
+                                    {isProcessing ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}
+                                </div>
                                 <div className="flex flex-col text-left">
-                                    <span className="font-black text-white uppercase text-lg italic">{isProcessing ? "Loading..." : "Watch Ad"}</span>
+                                    <span className="font-black text-white uppercase text-lg italic tracking-tight">{isProcessing ? "Connecting..." : "Watch Video"}</span>
                                     <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-[0.2em]">Earn $0.10 Gold</span>
                                 </div>
                             </div>
-                            <ChevronRight className="h-6 w-6 text-yellow-400" />
+                            <ChevronRight className="h-6 w-6 text-yellow-400/40 group-hover:text-yellow-400 transition-colors" />
                         </button>
-                    </div>
-                )}
-
-                {activeTab === 'portals' && (
-                    <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-right duration-300">
-                        {PROVIDERS.map(p => (
-                            <button key={p.id} onClick={() => openPortal(p.id, p.url)} className={cn("p-6 h-48 rounded-[45px] text-left relative overflow-hidden active:scale-95 transition-all glass-card border border-white/10 shadow-2xl", p.color)}>
-                                <div className="absolute top-0 right-0 p-4 opacity-10"><ExternalLink className="h-12 w-12" /></div>
-                                <span className="block font-black uppercase text-base italic leading-tight">{p.name}</span>
-                                <span className="block text-[8px] font-bold opacity-60 mt-1 uppercase tracking-tighter">Enter Arcade</span>
-                            </button>
-                        ))}
-                    </div>
+                    </>
                 )}
 
                 {activeTab === 'history' && (
                     <div className="space-y-3 animate-in slide-in-from-right duration-300">
+                         <div className="flex items-center justify-between px-2 mb-4">
+                            <h3 className="text-xs font-black uppercase tracking-widest text-white/40 italic">Activity Feed</h3>
+                            <div className="h-px flex-1 mx-4 bg-white/10" />
+                        </div>
                         {PROVIDERS.map(p => {
                             const time = history[p.id];
                             return (
-                                <div key={p.id} onClick={() => openPortal(p.id, p.url)} className="glass-card p-6 rounded-[45px] flex items-center justify-between border border-white/5 shadow-2xl">
+                                <div key={p.id} onClick={() => openPortal(p.id, p.url)} className="bg-white/5 border border-white/5 rounded-[2rem] p-6 flex items-center justify-between active:bg-white/10 transition-colors group">
                                     <div className="flex items-center gap-5">
                                         <div className={cn("p-4 rounded-2xl text-white shadow-lg", p.color)}><p.icon className="h-6 w-6" /></div>
                                         <div className="flex flex-col">
-                                            <span className="font-black text-white uppercase text-xs tracking-tight">{p.name}</span>
+                                            <span className="font-black text-white uppercase text-xs tracking-tight italic">{p.name}</span>
                                             <span className="text-[10px] text-yellow-400/80 font-bold mt-1 uppercase tracking-wider">
                                                 {time ? `Last: ${new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "No activity yet"}
                                             </span>
@@ -440,69 +402,63 @@ export default function PlayNPaydayHub() {
 
                 {activeTab === 'wins' && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300 pb-32">
-                        <div className="space-y-4">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-4 text-white">Vault Rewards</h4>
-                            {REWARDS.map(r => (
-                                <RewardCard key={r.id} title={r.name} cost={r.jp} balance={cashBalance * 50000} icon={r.type === 'PayPal' ? Wallet : CreditCard} color={r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600"} onRedeem={() => handlePayoutRequest(r)} />
-                            ))}
+                        <div className="bg-gradient-to-br from-yellow-900/20 to-black border border-yellow-400/10 rounded-[2.5rem] p-10 text-center shadow-2xl relative overflow-hidden mb-8">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Wallet className="w-24 h-24 rotate-12 text-yellow-400" /></div>
+                            <p className="text-[10px] font-black text-yellow-400/40 uppercase tracking-[0.2em] mb-1 italic">Total Gold Balance</p>
+                            <p className="text-6xl font-black tracking-tighter text-white tabular-nums italic">${cashBalance.toFixed(2)}</p>
                         </div>
 
-                        <div className="bg-white/5 border border-white/10 p-6 rounded-[40px] mt-8">
-                            <div className="flex flex-col items-center gap-2 mb-6">
-                                <Trophy className="h-8 w-8 text-yellow-400" />
-                                <h3 className="text-xs font-black uppercase tracking-widest text-yellow-400">Global Leaderboard</h3>
+                        <div className="space-y-3">
+                            <h3 className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2 italic">Claim Rewards</h3>
+                            {REWARDS.map(r => {
+                                const isUnlocked = cashBalance >= r.cost;
+                                const Icon = r.type === 'PayPal' ? Wallet : CreditCard;
+                                const color = r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600";
+                                return (
+                                    <div key={r.id} className={cn("group bg-white/5 border border-white/5 rounded-[2rem] p-5 flex items-center justify-between transition-all", isUnlocked ? "border-yellow-400/30 bg-yellow-400/5 shadow-glow-yellow" : "opacity-40 grayscale")}>
+                                        <div className="flex items-center gap-4 text-left">
+                                            <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center shadow-lg text-white", color)}><Icon className="w-6 h-6" /></div>
+                                            <div>
+                                                <h4 className="font-black text-sm uppercase italic text-white">{r.name}</h4>
+                                                <p className="text-[10px] text-white/40 font-bold uppercase">{isUnlocked ? "Ready to Claim" : `Unlock at $${r.cost.toFixed(2)}`}</p>
+                                            </div>
+                                        </div>
+                                        {isUnlocked ? (
+                                            <button onClick={() => handlePayoutRequest(r)} className="bg-yellow-400 text-black text-[10px] font-black px-5 py-2.5 rounded-xl shadow-xl active:scale-95 transition-all italic">REDEEM</button>
+                                        ) : <Lock className="w-4 h-4 text-white/20 mr-2" />}
+                                    </div>
+                                )
+                            })}
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 p-8 rounded-[3rem] mt-12 backdrop-blur-xl">
+                            <div className="flex flex-col items-center gap-2 mb-8 text-center">
+                                <Trophy className="h-10 w-10 text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)]" />
+                                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-yellow-400 italic">The Hall of Fame</h3>
                             </div>
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 {leaderboard.map((u, i) => (
-                                    <div key={i} className="flex justify-between items-center text-[10px] font-black border-b border-white/5 pb-2">
-                                        <span className="flex items-center gap-2"><span className="opacity-30">{i+1}.</span> {u.username}</span>
-                                        <span className="text-primary italic">{(u.total_earned || u.cash_balance * 50000 || 0).toLocaleString()} JS</span>
+                                    <div key={i} className="flex justify-between items-center text-[10px] font-black border-b border-white/5 pb-3">
+                                        <span className="flex items-center gap-3"><span className={cn("px-2 py-1 rounded-md text-[8px]", i === 0 ? "bg-yellow-400 text-black" : "bg-white/5 text-white/40")}>{i+1}</span> {u.username}</span>
+                                        <span className="text-yellow-400 italic">${(u.cash_balance || 0).toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {adminPayouts.length > 0 && (
-                            <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-[40px] mt-8 animate-pulse">
-                                <h3 className="text-xs font-black uppercase tracking-widest text-red-500 mb-4 text-center">Admin: Pending Payouts</h3>
-                                <div className="space-y-4">
-                                    {adminPayouts.map((p, i) => (
-                                        <div key={i} className="text-[10px] bg-black/40 p-3 rounded-2xl border border-white/5">
-                                            <div className="flex justify-between font-black uppercase italic mb-1">
-                                                <span>{p.profiles?.username}</span>
-                                                <span className="text-green-400">{p.reward_name}</span>
-                                            </div>
-                                            <div className="opacity-40 font-mono truncate">{p.profiles?.email}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-4 mt-8">
-                            <button onClick={() => setShowLegal('rules')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px]">Rules</button>
-                            <button onClick={() => setShowLegal('privacy')} className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black uppercase text-[10px]">Privacy</button>
-                        </div>
-
-                        <div className="flex flex-col items-center gap-4 text-center mt-12 pb-20">
-                            <span className="text-sm font-black uppercase italic text-yellow-400/60">{profile?.username || 'Empire Member'}</span>
-                            <button onClick={() => window.location.assign('mailto:support@playnpayday.fun')} className="text-yellow-400 text-[10px] font-black uppercase tracking-widest border border-yellow-400/20 px-8 py-4 rounded-2xl w-full max-w-[240px]">Contact Support</button>
-                            <button onClick={auth.signOut} className="text-white/20 text-[10px] font-black uppercase tracking-widest mt-4">Log Out</button>
-                            <button onClick={async () => {
-                                if(confirm("PERMANENTLY DELETE ACCOUNT?\n\nThis will erase all your earnings and progress. This cannot be undone.")) {
-                                    await auth.deleteAccount();
-                                }
-                            }} className="text-red-500/40 text-[10px] font-black uppercase tracking-widest mt-4 border border-red-500/10 px-6 py-2 rounded-lg">Delete Account</button>
+                        <div className="flex flex-col items-center gap-6 text-center mt-12 pb-20">
+                            <button onClick={() => window.location.assign('mailto:support@playnpayday.fun')} className="text-yellow-400 text-[10px] font-black uppercase tracking-widest border border-yellow-400/20 px-10 py-5 rounded-3xl w-full max-w-[260px] italic">Contact Support</button>
+                            <button onClick={signOut} className="text-white/20 text-[10px] font-black uppercase tracking-widest italic underline">Logout Empire</button>
                         </div>
                     </div>
                 )}
-            </div>
+            </main>
 
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-12 z-[5000]">
-                <NavButton icon={TrendingUp} label="Home" active={activeTab === 'home'} onClick={() => handleTabChange('home')} />
-                <NavButton icon={LayoutGrid} label="Portals" active={activeTab === 'portals'} onClick={() => handleTabChange('portals')} />
-                <NavButton icon={History} label="History" active={activeTab === 'history'} onClick={() => handleTabChange('history')} />
-                <NavButton icon={Award} label="Wins" active={activeTab === 'wins'} onClick={() => handleTabChange('wins')} />
+                <NavButton icon={Zap} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                <NavButton icon={History} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
+                <NavButton icon={Wallet} label="Wins" active={activeTab === 'wins'} onClick={() => handleTabChange('wins')} />
+                <NavButton icon={Info} label="Info" active={false} onClick={() => toast.info("Play 'n Payday v2.2 - The Gold Standard")} />
             </nav>
 
             {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
@@ -514,71 +470,35 @@ function LegalModal({ type, onClose }: { type: 'privacy' | 'terms' | 'faq' | 'ru
     const titles = { privacy: 'Privacy Policy', terms: 'Terms of Service', faq: 'F.A.Q.', rules: 'Official Rules' };
     return (
         <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-xl flex flex-col p-8 pt-20 animate-in fade-in duration-300 overflow-y-auto">
-            <button onClick={onClose} className="absolute top-8 left-8 text-white/40 uppercase font-black text-[10px] flex items-center gap-2">
-                <ChevronRight className="h-4 w-4 rotate-180" /> Back
+            <button onClick={onClose} className="absolute top-8 left-8 text-white/40 uppercase font-black text-[10px] flex items-center gap-2 italic">
+                <ChevronRight className="h-4 w-4 rotate-180" /> Return
             </button>
-            <h2 className="text-4xl font-black italic uppercase mb-8 mt-4">{titles[type]}</h2>
+            <h2 className="text-4xl font-black italic uppercase mb-8 mt-4 text-white">THE <span className="text-yellow-400">{titles[type]}</span></h2>
             <div className="text-white/60 text-xs font-bold uppercase leading-relaxed space-y-4 pb-20">
                 {type === 'privacy' && (
                     <>
                         <p>We collect your email and username to manage your rewards and account security.</p>
-                        <p className="text-yellow-400">ACCOUNT DELETION:</p>
-                        <p>You may delete your account at any time using the "Delete Account" button at the bottom of the Wins tab. Alternatively, you can email us at <span className="text-white">support@playnpayday.fun</span> to request full data removal.</p>
+                        <p className="text-yellow-400 font-black italic">ACCOUNT DELETION:</p>
+                        <p>Email us at <span className="text-white underline">support@playnpayday.fun</span> to request full data removal.</p>
                     </>
                 )}
                 {type === 'terms' && (
                     <p>By using Play 'n Payday, you agree to our terms. Users must be 18+ to redeem rewards. Fraudulent activity results in immediate bans.</p>
                 )}
                 {type === 'rules' && (
-                    <p>1. Play games to earn balance. 2. Payouts start at $5.00. 3. One account per person. 4. VPNs are strictly prohibited.</p>
+                    <p>1. Enter portals to earn balance. 2. Payouts start at $5.00. 3. One account per person. 4. VPNs are strictly prohibited.</p>
                 )}
-                <p className="pt-4 border-t border-white/10">For more details, visit playnpayday.fun</p>
+                <p className="pt-4 border-t border-white/10">Build v2.2.0-empire</p>
             </div>
         </div>
     );
-}
-
-function DashButton({ icon: Icon, label, color, onClick }: any) {
-    return (
-        <button onClick={onClick} className="glass-card p-7 rounded-[45px] flex items-center justify-between active:scale-95 transition-all border border-white/5 shadow-2xl w-full">
-            <div className="flex items-center gap-6 text-left">
-                <div className={cn("p-4 rounded-3xl text-white shadow-lg", color)}><Icon className="h-6 w-6" /></div>
-                <span className="font-black text-white uppercase text-lg italic tracking-tight">{label}</span>
-            </div>
-            <ChevronRight className="h-5 w-5 text-white/20" />
-        </button>
-    )
-}
-
-function RewardCard({ title, cost, balance, icon: Icon, color, onRedeem }: any) {
-    const isUnlocked = balance >= cost;
-    return (
-        <div className={cn("glass-card p-6 rounded-[40px] flex justify-between items-center transition-all border", isUnlocked ? "border-yellow-400/50 bg-yellow-400/10" : "border-white/5 opacity-40")}>
-            <div className="flex items-center gap-4 text-left">
-                <div className={cn("p-3 rounded-2xl text-white shadow-lg", color)}><Icon className="h-5 w-5" /></div>
-                <div className="flex flex-col">
-                    <span className="font-black text-xs uppercase tracking-tight text-white">{title}</span>
-                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{isUnlocked ? "READY TO CLAIM" : "LOCKED"}</span>
-                </div>
-            </div>
-            {isUnlocked ? (
-                <button onClick={onRedeem} className="bg-yellow-400 text-black text-[10px] font-black px-4 py-2 rounded-xl shadow-glow-yellow animate-pulse">REDEEM</button>
-            ) : <Lock className="h-4 w-4 text-white/20" />}
-        </div>
-    )
 }
 
 function NavButton({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
     return (
-      <button onClick={onClick} className={cn("flex flex-col items-center justify-center gap-1 w-20 py-2 transition-all active:scale-90", active ? "text-yellow-400 scale-110 font-black" : "text-white/40")}>
+      <button onClick={onClick} className={cn("flex flex-col items-center justify-center gap-1.5 w-20 py-2 transition-all active:scale-90", active ? "text-yellow-400 scale-110 font-black" : "text-white/40")}>
         <Icon className={cn("h-6 w-6", active && "fill-current")} />
-        <span className={cn("text-[8px] font-black uppercase tracking-widest", active ? "opacity-100" : "opacity-40")}>{label}</span>
+        <span className={cn("text-[8px] font-black uppercase tracking-widest italic", active ? "opacity-100" : "opacity-40")}>{label}</span>
       </button>
     );
-}
-
-function Layers(props: any) {
-    return (
-        <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-    )
 }

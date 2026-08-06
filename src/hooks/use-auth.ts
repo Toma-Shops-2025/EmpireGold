@@ -10,29 +10,32 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
         if (data) {
             setProfile(data);
-        } else {
-            const { data: { session } } = await supabase.auth.getSession();
-            const username = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || 'Member';
-            const { data: newP } = await supabase.from('profiles').insert({ id: userId, username: username, cash_balance: 0 }).select().single();
-            if (newP) setProfile(newP);
         }
     } catch (e) {
-        console.error(e);
+        console.error("Fetch error:", e);
     } finally {
         setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    // 1. Handle Session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
           setUser(session.user);
           fetchProfile(session.user.id);
       } else { setLoading(false); }
     });
+
+    // 2. Handle Auth Changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
           setUser(session.user);
@@ -43,65 +46,66 @@ export function useAuth() {
           setLoading(false);
       }
     });
-    return () => subscription.unsubscribe();
-  }, [fetchProfile]);
+
+    // 3. REAL-TIME BALANCE UPDATES
+    let profileSubscription: any;
+    if (user) {
+        profileSubscription = supabase
+            .channel(`profile-${user.id}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'profiles',
+                filter: `id=eq.${user.id}`
+            }, (payload) => {
+                setProfile(payload.new);
+            })
+            .subscribe();
+    }
+
+    return () => {
+        subscription.unsubscribe();
+        if (profileSubscription) supabase.removeChannel(profileSubscription);
+    };
+  }, [user, fetchProfile]);
 
   const addCash = async (amount: number) => {
     if (!user) return;
-    const val = parseFloat(amount.toFixed(2));
+    const val = parseFloat(amount.toFixed(4));
 
     try {
-        console.log(`Vault: Adding $${val}...`);
-
-        // 1. Try the RPC call
-        const { data: rpcResult, error: rpcError } = await supabase.rpc('increment_cash_balance', {
+        const { error: rpcError } = await supabase.rpc('increment_cash_balance', {
             user_id: user.id,
             amount: val
         });
 
         if (rpcError) {
-            console.warn("RPC failed, trying direct table update...", rpcError);
-
-            // 2. Fallback: Manual calculation and update
             const { data: current } = await supabase.from('profiles').select('cash_balance').eq('id', user.id).single();
-            const newTotal = parseFloat(((current?.cash_balance || 0) + val).toFixed(2));
-
-            const { error: updateError } = await supabase
-                .from('profiles')
-                .update({ cash_balance: newTotal })
-                .eq('id', user.id);
-
-            if (updateError) throw updateError;
+            const newTotal = parseFloat(((current?.cash_balance || 0) + val).toFixed(4));
+            await supabase.from('profiles').update({ cash_balance: newTotal }).eq('id', user.id);
         }
-
-        // 3. FORCE REFRESH: Pull the data immediately after saving
-        await fetchProfile(user.id);
-        console.log("Vault: Sync Complete.");
-
     } catch (e: any) {
         console.error("Vault Error:", e);
-        toast.error("Vault Sync Error", { description: e.message || "Database connection lost." });
     }
   };
 
-  const signIn = async (e: string, p: string) => {
-      const { error } = await supabase.auth.signInWithPassword({ email: e, password: p });
+  const signIn = async (email: string, pass: string) => {
+      const { error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
       if (error) throw error;
   };
 
-  const signUp = async (e: string, p: string, u: string) => {
+  const signUp = async (email: string, pass: string, username: string) => {
       const { data, error } = await supabase.auth.signUp({
-          email: e,
-          password: p,
-          options: { data: { username: u } }
+          email: email,
+          password: pass,
+          options: { data: { username } }
       });
       if (error) throw error;
       if (data.user) {
-          // Now including email in the profile record
           await supabase.from('profiles').insert({
               id: data.user.id,
-              username: u,
-              email: e,
+              username,
+              email,
               cash_balance: 0
           });
       }
@@ -109,16 +113,5 @@ export function useAuth() {
 
   const signOut = () => supabase.auth.signOut();
 
-  const deleteAccount = async () => {
-      if (!user) return;
-      try {
-          await supabase.from('profiles').delete().eq('id', user.id);
-          await supabase.auth.signOut();
-          toast.success("Account deleted successfully");
-      } catch (e: any) {
-          toast.error("Deletion failed", { description: e.message });
-      }
-  };
-
-  return { user, profile, loading, signIn, signUp, signOut, deleteAccount, addCash, fetchProfile, supabase };
+  return { user, profile, loading, signIn, signUp, signOut, addCash, fetchProfile, supabase };
 }
