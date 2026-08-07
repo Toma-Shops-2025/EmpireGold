@@ -18,10 +18,11 @@ export async function initAds(): Promise<void> {
   const startInit = () => {
     if (window.unityads) {
       window.unityads.initialize(UNITY_GAME_ID, false, () => {
-        console.log("✅ Unity Ads Ready");
+        console.log("✅ Unity Ads Ready - Play 'n Payday");
         // Pre-load units
         window.unityads.load("Rewarded_Android");
         window.unityads.load("Interstitial_Android");
+        window.unityads.load("Banner_Android");
       });
     }
   };
@@ -39,14 +40,14 @@ export async function showRewardedAd(): Promise<{ success: boolean }> {
 
   return new Promise((resolve) => {
     if (!window.unityads) {
-      toast.error("Ad Engine starting... try again");
-      initAds(); // Retry init
+      toast.error("Ad Engine not ready. Re-initializing...");
+      initAds();
       resolve({ success: false });
       return;
     }
 
     window.unityads.show("Rewarded_Android", (res: any) => {
-      // Reload the next ad immediately after showing one
+      // Reload the next ad immediately
       window.unityads.load("Rewarded_Android");
 
       if (res === "COMPLETED") {
@@ -67,6 +68,12 @@ export async function showInterstitial(): Promise<void> {
     });
 }
 
+/** Show/Hide Banner Ad */
 export function setBannerVisible(visible: boolean): void {
-    console.log("Banner state:", visible);
+    if (!isNative() || !window.unityads) return;
+    if (visible) {
+        window.unityads.showBanner("Banner_Android");
+    } else {
+        window.unityads.hideBanner();
+    }
 }
