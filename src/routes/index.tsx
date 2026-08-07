@@ -1,3 +1,4 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
@@ -6,6 +7,10 @@ import { Wallet, Gamepad2, Coins, TrendingUp, Trophy, Gift, Loader2, Zap, User a
 import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
 import { initAds, showRewardedAd, showInterstitial, setBannerVisible } from '@/lib/ads'
+
+export const Route = createFileRoute("/")({
+  component: PlayNPaydayHub,
+});
 
 const PROVIDERS = [
     { id: 'poki', name: 'POKI ARCADE', desc: 'The biggest web arcade', url: 'https://poki.com', color: 'from-blue-600 to-blue-900', icon: Gamepad2, bonus: "POPULAR" },
@@ -25,31 +30,33 @@ const MINI_GAMES = [
   { id: "8", name: "Void Runner", emoji: "🌑" },
 ];
 
-const REWARDS = [
-    { id: 'v5', name: '$5 Visa Card', cost: 5.00, type: 'Visa' },
-    { id: 'p5', name: '$5 PayPal Cash', cost: 5.00, type: 'PayPal' },
-    { id: 'v10', name: '$10 Visa Card', cost: 10.00, type: 'Visa' },
-    { id: 'p10', name: '$10 PayPal Cash', cost: 10.00, type: 'PayPal' },
-];
-
 function AppBackground() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
-        <div className="absolute inset-0 opacity-[0.3]" style={{ backgroundImage: 'url(/bg-gold.png)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
+        <div
+            className="absolute inset-0 opacity-[0.3]"
+            style={{
+                backgroundImage: 'url(/bg-gold.png)',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+            }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black" />
     </div>
   )
 }
 
-export default function PlayNPaydayHub() {
+function PlayNPaydayHub() {
     const auth = useAuth()
-    const { user, profile, loading: authLoading, signIn, signUp, addCash, fetchProfile, supabase } = auth
-    const [activeTab, setActiveTab] = useState<'home' | 'history' | 'wins'>('home')
+    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, fetchProfile, supabase } = auth
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState<'home' | 'history'>('home')
     const [isProcessing, setIsProcessing] = useState(false)
     const [hasInteracted, setHasInteracted] = useState(false);
-    const [leaderboard, setLeaderboard] = useState<any[]>([]);
+
     const [history, setHistory] = useState<Record<string, number>>(() => {
-        const saved = localStorage.getItem('pnp_history_v3');
+        const saved = localStorage.getItem('pnp_history_v4');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
     });
 
@@ -60,22 +67,59 @@ export default function PlayNPaydayHub() {
     const [showPass, setShowPass] = useState(false)
 
     useEffect(() => {
-        if (Capacitor.isNativePlatform()) initAds();
-    }, []);
+        if (user) setBannerVisible(true);
+        else setBannerVisible(false);
+    }, [user]);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         if (loading) return;
-        if (!isLogin && !agreed) { toast.error("Agree to the Empire Code."); return; }
+        if (!isLogin && !agreed) {
+            toast.error("Please agree to the Empire Code.");
+            return;
+        }
         setLoading(true);
         try {
-            const res = isLogin ? await signIn(formData.email, formData.password) : await signUp(formData.email, formData.password, formData.username);
+            const res = isLogin
+                ? await signIn(formData.email, formData.password)
+                : await signUp(formData.email, formData.password, formData.username);
+
             if (res?.error) throw res.error;
             setHasInteracted(true);
         } catch (error: any) {
-            toast.error(error.message);
-        } finally { setLoading(false); }
+            toast.error("Auth Failed", { description: error.message });
+        } finally {
+            setLoading(false);
+        }
     }
+
+    const bgmRef = useRef<HTMLAudioElement | null>(null);
+
+    useEffect(() => {
+        if (user && hasInteracted && !bgmRef.current) {
+            const audio = new Audio('/audio/promo.MP3');
+            audio.loop = true;
+            audio.volume = 0.15;
+            audio.play().catch(e => console.log("Audio play blocked"));
+            bgmRef.current = audio;
+        }
+        return () => {
+            if (bgmRef.current) {
+                bgmRef.current.pause();
+                bgmRef.current = null;
+            }
+        };
+    }, [user, hasInteracted]);
+
+    useEffect(() => {
+        const handleFirstInteraction = () => setHasInteracted(true);
+        window.addEventListener('click', handleFirstInteraction, { once: true });
+        window.addEventListener('touchstart', handleFirstInteraction, { once: true });
+        return () => {
+            window.removeEventListener('click', handleFirstInteraction);
+            window.removeEventListener('touchstart', handleFirstInteraction);
+        };
+    }, []);
 
     const checkRewards = useCallback(async () => {
         const startTime = localStorage.getItem('pnp_session_start');
@@ -85,19 +129,20 @@ export default function PlayNPaydayHub() {
             const diffMs = now - start;
             localStorage.removeItem('pnp_session_start');
 
-            // IF THE SESSION IS OLDER THAN 2 HOURS, DISCARD IT (The Ghost Score Fix)
-            if (diffMs > 7200000) return;
+            if (diffMs > 7200000) return; // Expiration
 
             let elapsedMinutes = Math.floor(diffMs / 60000);
-            if (elapsedMinutes > 30) elapsedMinutes = 30; // Max 30 mins
+            if (elapsedMinutes > 30) elapsedMinutes = 30;
 
             if (elapsedMinutes >= 1) {
                 const reward = 0.05 + (elapsedMinutes * 0.01);
                 await addCash(reward);
-                toast.success(`Royal Rewards! +$${reward.toFixed(2)}`);
+                toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { icon: '👑' });
             }
+        } else if (user) {
+            fetchProfile(user.id);
         }
-    }, [user, addCash]);
+    }, [user, addCash, fetchProfile]);
 
     useEffect(() => {
         if (!user) return;
@@ -111,10 +156,10 @@ export default function PlayNPaydayHub() {
         setHasInteracted(true);
         const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
-        localStorage.setItem('pnp_history_v3', JSON.stringify(newHistory));
+        localStorage.setItem('pnp_history_v4', JSON.stringify(newHistory));
         localStorage.setItem('pnp_session_start', Date.now().toString());
+        showInterstitial();
         if (Capacitor.isNativePlatform()) {
-            showInterstitial();
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
             window.open(url, '_blank');
@@ -135,9 +180,9 @@ export default function PlayNPaydayHub() {
     }
 
     if (authLoading) return (
-        <div className="h-screen w-full bg-black flex flex-col items-center justify-center text-white p-8">
+        <div className="h-screen w-full bg-black flex flex-col items-center justify-center text-white">
             <AppBackground />
-            <Loader2 className="animate-spin h-10 w-10 text-yellow-400" />
+            <Loader2 className="animate-spin h-10 w-10 text-yellow-400 z-10" />
         </div>
     );
 
@@ -147,6 +192,7 @@ export default function PlayNPaydayHub() {
                 <AppBackground />
                 <div className="relative z-10 text-center space-y-2 mb-12">
                     <h1 className="text-6xl font-black italic tracking-tighter uppercase leading-none text-white">PLAY 'N<br/><span className="text-yellow-400">PAYDAY</span></h1>
+                    <p className="text-xs font-bold tracking-[0.3em] text-white/40 uppercase italic">The Empire Awaits</p>
                 </div>
                 <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mx-auto text-left">
                     {!isLogin && (
@@ -170,7 +216,7 @@ export default function PlayNPaydayHub() {
                             <label htmlFor="terms-pnp" className="text-[10px] text-white/60 font-bold uppercase italic leading-tight">I am 18+ and agree to the Empire Code</label>
                         </div>
                     )}
-                    <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest active:scale-95 transition-all mt-4 italic">
+                    <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 italic">
                         {loading && <Loader2 className="animate-spin h-5 w-5" />}
                         {isLogin ? 'Enter Empire' : 'Join Empire'}
                     </button>
@@ -187,6 +233,7 @@ export default function PlayNPaydayHub() {
     return (
         <div className="h-screen w-full text-white flex flex-col overflow-y-auto font-sans relative bg-black no-scrollbar pb-32">
             <AppBackground />
+
             <header className="px-6 pt-12 pb-4 flex justify-between items-center z-20 relative">
                 <div className="flex items-center gap-3 text-left">
                     <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-amber-600 p-0.5 shadow-[0_0_20px_rgba(250,204,21,0.3)]">
@@ -201,6 +248,7 @@ export default function PlayNPaydayHub() {
                         </p>
                     </div>
                 </div>
+
                 <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2 shadow-2xl">
                     <Coins className="w-4 h-4 text-yellow-400" />
                     <span className="font-black text-lg tabular-nums tracking-tighter text-white italic">${cashBalance.toFixed(2)}</span>
@@ -217,13 +265,17 @@ export default function PlayNPaydayHub() {
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 {PROVIDERS.map((p) => (
-                                    <button key={p.id} onClick={() => openPortal(p.id, p.url)} className="relative h-32 rounded-[2rem] overflow-hidden border border-white/5 bg-gradient-to-br from-white/5 to-transparent p-5 flex flex-col justify-between active:scale-95 transition-all group text-left shadow-xl">
+                                    <button
+                                        key={p.id}
+                                        onClick={() => openPortal(p.id, p.url)}
+                                        className="relative h-32 rounded-[2rem] overflow-hidden border border-white/5 bg-gradient-to-br from-white/5 to-transparent p-5 flex flex-col justify-between active:scale-95 transition-all group text-left shadow-xl"
+                                    >
                                         <div className={cn("absolute inset-0 opacity-20 bg-gradient-to-br", p.color)} />
                                         <div className="flex justify-between items-start z-10">
                                             <p.icon className={cn("w-7 h-7 text-white")} />
                                             <span className="text-[8px] font-black bg-yellow-400/20 px-2 py-0.5 rounded-full text-yellow-400 border border-yellow-400/20">{p.bonus}</span>
                                         </div>
-                                        <div className="z-10">
+                                        <div className="z-10 text-left">
                                             <h4 className="text-sm font-black uppercase italic leading-none tracking-tight">{p.name}</h4>
                                             <p className="text-[9px] text-white/40 mt-1 font-bold">{p.desc}</p>
                                         </div>
@@ -231,9 +283,10 @@ export default function PlayNPaydayHub() {
                                 ))}
                             </div>
                         </section>
+
                         <button onClick={handleWatchReward} disabled={isProcessing} className="w-full bg-white/5 border border-white/10 p-8 rounded-[3rem] flex items-center justify-between active:scale-95 transition-all group backdrop-blur-xl">
                             <div className="flex items-center gap-6">
-                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl">
+                                <div className="bg-yellow-400 p-4 rounded-3xl text-black shadow-2xl shadow-yellow-400/20">
                                     {isProcessing ? <Loader2 className="h-8 w-8 animate-spin" /> : <PlayCircle className="h-8 w-8" />}
                                 </div>
                                 <div className="flex flex-col text-left">
@@ -243,6 +296,7 @@ export default function PlayNPaydayHub() {
                             </div>
                             <ChevronRight className="h-6 w-6 text-yellow-400/40 group-hover:text-yellow-400 transition-colors" />
                         </button>
+
                         <section>
                             <div className="flex items-center justify-between px-2 mb-4">
                                 <h3 className="text-xs font-black uppercase tracking-widest text-white/40 italic">Arcade Games</h3>
@@ -251,7 +305,11 @@ export default function PlayNPaydayHub() {
                             </div>
                             <div className="grid grid-cols-1 gap-2">
                                 {MINI_GAMES.map((game) => (
-                                    <button key={game.id} onClick={() => navigate({ to: "/game/$tableId", params: { tableId: game.id } })} className="bg-white/5 border border-white/5 rounded-2xl p-5 flex items-center justify-between active:bg-white/10 transition-colors group backdrop-blur-sm">
+                                    <button
+                                        key={game.id}
+                                        onClick={() => navigate({ to: "/game/$tableId", params: { tableId: game.id } })}
+                                        className="bg-white/5 border border-white/5 rounded-2xl p-5 flex items-center justify-between active:bg-white/10 transition-colors group backdrop-blur-sm"
+                                    >
                                         <div className="flex items-center gap-4 text-left">
                                             <span className="text-2xl drop-shadow-md">{game.emoji}</span>
                                             <span className="font-black uppercase italic text-sm tracking-tight text-white/90">{game.name}</span>
@@ -266,6 +324,7 @@ export default function PlayNPaydayHub() {
                         </section>
                     </>
                 )}
+
                 {activeTab === 'history' && (
                     <div className="space-y-3 animate-in slide-in-from-right duration-300">
                          <div className="flex items-center justify-between px-2 mb-4">
@@ -291,49 +350,13 @@ export default function PlayNPaydayHub() {
                         })}
                     </div>
                 )}
-                {activeTab === 'wins' && (
-                    <div className="space-y-6 animate-in slide-in-from-right duration-300 pb-32">
-                        <div className="bg-gradient-to-br from-yellow-900/20 to-black border border-yellow-400/10 rounded-[2.5rem] p-10 text-center shadow-2xl relative overflow-hidden mb-8">
-                            <div className="absolute top-0 right-0 p-4 opacity-10"><Wallet className="w-24 h-24 rotate-12 text-yellow-400" /></div>
-                            <p className="text-[10px] font-black text-yellow-400/40 uppercase tracking-[0.2em] mb-1 italic">Total Gold Balance</p>
-                            <p className="text-6xl font-black tracking-tighter text-white tabular-nums italic">${cashBalance.toFixed(2)}</p>
-                        </div>
-                        <div className="space-y-3">
-                            <h3 className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2 italic">Claim Rewards</h3>
-                            {REWARDS.map(r => {
-                                const isUnlocked = cashBalance >= r.cost;
-                                const Icon = r.type === 'PayPal' ? Wallet : CreditCard;
-                                const color = r.type === 'Amazon' ? "bg-orange-500" : r.type === 'PayPal' ? "bg-green-600" : "bg-blue-600";
-                                return (
-                                    <div key={r.id} className={cn("group bg-white/5 border border-white/5 rounded-[2rem] p-5 flex items-center justify-between transition-all", isUnlocked ? "border-yellow-400/30 bg-yellow-400/5 shadow-glow-yellow" : "opacity-40 grayscale")}>
-                                        <div className="flex items-center gap-4 text-left">
-                                            <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center shadow-lg text-white", color)}><Icon className="w-6 h-6" /></div>
-                                            <div>
-                                                <h4 className="font-black text-sm uppercase italic text-white">{r.name}</h4>
-                                                <p className="text-[10px] text-white/40 font-bold uppercase">{isUnlocked ? "Ready to Claim" : `Unlock at $${r.cost.toFixed(2)}`}</p>
-                                            </div>
-                                        </div>
-                                        {isUnlocked ? (
-                                            <button onClick={() => {
-                                                const { data: { user } } = supabase.auth.getUser();
-                                                supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: r.name, points_cost: r.cost * 1000, status: 'pending' }).then(() => {
-                                                    addCash(-r.cost);
-                                                    toast.success("Submitted!");
-                                                });
-                                            }} className="bg-yellow-400 text-black text-[10px] font-black px-5 py-2.5 rounded-xl shadow-xl active:scale-95 transition-all italic">REDEEM</button>
-                                        ) : <Lock className="w-4 h-4 text-white/20 mr-2" />}
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
-                )}
             </main>
+
             <nav className="fixed bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-3xl border-t border-white/10 flex justify-around items-center px-4 pb-12 z-[5000]">
-                <NavButton icon={Zap} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                <NavButton icon={History} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
-                <NavButton icon={Wallet} label="Wins" active={activeTab === 'wins'} onClick={() => handleTabChange('wins')} />
-                <NavButton icon={Info} label="Info" active={false} onClick={() => toast.info("Play 'n Payday v2.4")} />
+                <NavButton icon={Zap} label="Lobby" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                <NavButton icon={Trophy} label="Ranks" active={false} onClick={() => navigate({ to: "/leaderboard" })} />
+                <NavButton icon={Wallet} label="Wins" active={false} onClick={() => navigate({ to: "/cashout" })} />
+                <NavButton icon={Info} label="Info" active={false} onClick={() => toast.info("Play 'n Payday v2.4 - The Gold Standard")} />
             </nav>
         </div>
     )
