@@ -7,7 +7,6 @@ import { toast } from 'sonner'
 import { Capacitor } from '@capacitor/core'
 import { initAds, showRewardedAd, showInterstitial, setBannerVisible } from '@/lib/ads'
 
-// THE EMPIRE GOLD PROVIDERS
 const PROVIDERS = [
     { id: 'poki', name: 'POKI ARCADE', desc: 'The biggest web arcade', url: 'https://poki.com', color: 'from-blue-600 to-blue-900', icon: Gamepad2, bonus: "POPULAR" },
     { id: 'crazy', name: 'CRAZY GAMES', desc: 'Top action & strategy', url: 'https://www.crazygames.com', color: 'from-purple-600 to-purple-900', icon: Zap, bonus: "HOT" },
@@ -15,16 +14,22 @@ const PROVIDERS = [
     { id: 'y8', name: 'Y8 GAMES', desc: 'Classic arcade hits', url: 'https://www.y8.com', color: 'from-emerald-600 to-emerald-900', icon: Trophy, bonus: "LEGACY" },
 ];
 
+const MINI_GAMES = [
+  { id: "1", name: "Neon Strike", emoji: "🚀" },
+  { id: "2", name: "Cyber Dash", emoji: "💎" },
+  { id: "3", name: "Galactic Quest", emoji: "👾" },
+  { id: "4", name: "Retro Pulse", emoji: "🕹️" },
+  { id: "5", name: "Pixel Jump", emoji: "🏃" },
+  { id: "6", name: "Sonic Wave", emoji: "🌊" },
+  { id: "7", name: "Star Blazer", emoji: "✨" },
+  { id: "8", name: "Void Runner", emoji: "🌑" },
+];
+
 const REWARDS = [
     { id: 'v5', name: '$5 Visa Card', cost: 5.00, type: 'Visa' },
-    { id: 'a5', name: '$5 Amazon Gift', cost: 5.00, type: 'Amazon' },
     { id: 'p5', name: '$5 PayPal Cash', cost: 5.00, type: 'PayPal' },
     { id: 'v10', name: '$10 Visa Card', cost: 10.00, type: 'Visa' },
-    { id: 'a10', name: '$10 Amazon Gift', cost: 10.00, type: 'Amazon' },
     { id: 'p10', name: '$10 PayPal Cash', cost: 10.00, type: 'PayPal' },
-    { id: 'v25', name: '$25 Visa Card', cost: 25.00, type: 'Visa' },
-    { id: 'a25', name: '$25 Amazon Gift', cost: 25.00, type: 'Amazon' },
-    { id: 'p25', name: '$25 PayPal Cash', cost: 25.00, type: 'PayPal' },
 ];
 
 function AppBackground() {
@@ -38,101 +43,58 @@ function AppBackground() {
 
 export default function PlayNPaydayHub() {
     const auth = useAuth()
-    const { user, profile, loading: authLoading, signIn, signUp, signOut, addCash, fetchProfile, supabase } = auth
-    const [activeTab, setActiveTab] = useState<'home' | 'portals' | 'history' | 'wins'>('home')
+    const { user, profile, loading: authLoading, signIn, signUp, addCash, fetchProfile, supabase } = auth
+    const [activeTab, setActiveTab] = useState<'home' | 'history' | 'wins'>('home')
     const [isProcessing, setIsProcessing] = useState(false)
-    const [sessionTotal, setSessionTotal] = useState(0);
     const [hasInteracted, setHasInteracted] = useState(false);
     const [leaderboard, setLeaderboard] = useState<any[]>([]);
-    const [adminPayouts, setAdminPayouts] = useState<any[]>([]);
     const [history, setHistory] = useState<Record<string, number>>(() => {
-        const saved = localStorage.getItem('pnp_history_v2');
+        const saved = localStorage.getItem('pnp_history_v3');
         try { return saved ? JSON.parse(saved) : {}; } catch(e) { return {}; }
     });
 
-    const [email, setEmail] = useState('')
-    const [password, setPassword] = useState('')
-    const [username, setUsername] = useState('')
+    const [formData, setFormData] = useState({ email: '', password: '', username: '' });
     const [isLogin, setIsLogin] = useState(true)
     const [agreed, setAgreed] = useState(false)
     const [loading, setLoading] = useState(false)
     const [showPass, setShowPass] = useState(false)
-    const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | 'faq' | 'rules' | null>(null)
 
     useEffect(() => {
-        if (user) setBannerVisible(true);
-        else setBannerVisible(false);
-    }, [user]);
-
-    const handleTabChange = (newTab: 'home' | 'portals' | 'history' | 'wins') => {
-        if (newTab === 'wins' && activeTab !== 'wins') showInterstitial();
-        setActiveTab(newTab);
-    };
+        if (Capacitor.isNativePlatform()) initAds();
+    }, []);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         if (loading) return;
-        if (!isLogin && !agreed) {
-            toast.error("Please agree to the Terms of Service.");
-            return;
-        }
+        if (!isLogin && !agreed) { toast.error("Agree to the Empire Code."); return; }
         setLoading(true);
         try {
-            if (isLogin) await signIn(email, password);
-            else await signUp(email, password, username);
+            const res = isLogin ? await signIn(formData.email, formData.password) : await signUp(formData.email, formData.password, formData.username);
+            if (res?.error) throw res.error;
+            setHasInteracted(true);
         } catch (error: any) {
-            toast.error("Auth Failed", { description: error.message });
-        } finally {
-            setLoading(false);
-        }
+            toast.error(error.message);
+        } finally { setLoading(false); }
     }
-
-    const bgmRef = useRef<HTMLAudioElement | null>(null);
-
-    useEffect(() => {
-        if (user && hasInteracted) {
-            if (!bgmRef.current) {
-                bgmRef.current = new Audio('/audio/promo.MP3');
-                bgmRef.current.loop = true;
-                bgmRef.current.volume = 0.15;
-            }
-            const track = activeTab === 'wins' ? '/audio/vault.MP3' : '/audio/promo.MP3';
-            if (bgmRef.current.src.indexOf(track) === -1) {
-                bgmRef.current.src = track;
-            }
-            bgmRef.current.play().catch(e => console.log("Audio play blocked", e));
-        }
-    }, [activeTab, user, hasInteracted]);
-
-    useEffect(() => {
-        const handleFirstInteraction = () => setHasInteracted(true);
-        window.addEventListener('click', handleFirstInteraction, { once: true });
-        window.addEventListener('touchstart', handleFirstInteraction, { once: true });
-        return () => {
-            window.removeEventListener('click', handleFirstInteraction);
-            window.removeEventListener('touchstart', handleFirstInteraction);
-        };
-    }, []);
-
-    const lastPlayed = useMemo(() => {
-        const entries = Object.entries(history);
-        if (entries.length === 0) return null;
-        const [id] = entries.sort((a, b) => b[1] - a[1])[0];
-        return PROVIDERS.find(p => p.id === id);
-    }, [history]);
 
     const checkRewards = useCallback(async () => {
         const startTime = localStorage.getItem('pnp_session_start');
         if (startTime && user) {
             const start = parseInt(startTime);
             const now = Date.now();
-            const elapsedMinutes = Math.floor((now - start) / 60000);
+            const diffMs = now - start;
             localStorage.removeItem('pnp_session_start');
+
+            // IF THE SESSION IS OLDER THAN 2 HOURS, DISCARD IT (The Ghost Score Fix)
+            if (diffMs > 7200000) return;
+
+            let elapsedMinutes = Math.floor(diffMs / 60000);
+            if (elapsedMinutes > 30) elapsedMinutes = 30; // Max 30 mins
+
             if (elapsedMinutes >= 1) {
-                const reward = 0.05 + (elapsedMinutes * 0.02);
-                setSessionTotal(prev => prev + reward);
+                const reward = 0.05 + (elapsedMinutes * 0.01);
                 await addCash(reward);
-                toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { icon: '👑' });
+                toast.success(`Royal Rewards! +$${reward.toFixed(2)}`);
             }
         }
     }, [user, addCash]);
@@ -146,12 +108,13 @@ export default function PlayNPaydayHub() {
     }, [user, checkRewards]);
 
     const openPortal = async (portalId: string, url: string) => {
+        setHasInteracted(true);
         const newHistory = { ...history, [portalId]: Date.now() };
         setHistory(newHistory);
-        localStorage.setItem('pnp_history_v2', JSON.stringify(newHistory));
+        localStorage.setItem('pnp_history_v3', JSON.stringify(newHistory));
         localStorage.setItem('pnp_session_start', Date.now().toString());
-        showInterstitial();
         if (Capacitor.isNativePlatform()) {
+            showInterstitial();
             await Browser.open({ url, toolbarColor: '#000000' });
         } else {
             window.open(url, '_blank');
@@ -161,83 +124,53 @@ export default function PlayNPaydayHub() {
     const handleWatchReward = async () => {
         if (isProcessing) return;
         setIsProcessing(true);
+        setHasInteracted(true);
         try {
             const ad = await showRewardedAd();
             if (ad.success) {
                 await addCash(0.10);
-                setSessionTotal(prev => prev + 0.10);
+                toast.success("Cash Earned!");
             }
         } catch (e) { console.error(e); } finally { setIsProcessing(false); }
     }
 
-    const handlePayoutRequest = async (reward: any) => {
-        const currentBalance = parseFloat(profile?.cash_balance?.toString() || "0");
-        if (currentBalance < reward.cost) {
-            toast.error("Insufficient Balance");
-            return;
-        }
-        try {
-            const { error } = await supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: reward.name, points_cost: reward.cost * 1000, status: 'pending' });
-            if (error) throw error;
-            await addCash(-reward.cost);
-            toast.success("Redemption Submitted!", { description: "Payouts are processed within 24-48 hours." });
-        } catch (e: any) { toast.error(e.message); }
-    }
-
-    useEffect(() => {
-        if (activeTab === 'wins' && supabase && user) {
-            const fetchData = async () => {
-                try {
-                    const { data: lData } = await supabase.from('profiles').select('username, cash_balance').order('cash_balance', { ascending: false }).limit(10);
-                    if (lData) setLeaderboard(lData);
-                    if (user?.email?.includes('gmail.com') || user?.email?.includes('playnpayday.fun')) {
-                        const { data: payouts } = await supabase.from('payout_requests').select('*, profiles(username, email)').eq('status', 'pending').order('created_at', { ascending: false });
-                        if (payouts) setAdminPayouts(payouts);
-                    }
-                } catch (e) { console.warn(e); }
-            };
-            fetchData();
-        }
-    }, [activeTab, supabase, user]);
-
     if (authLoading) return (
         <div className="h-screen w-full bg-black flex flex-col items-center justify-center text-white p-8">
             <AppBackground />
-            <Loader2 className="animate-spin h-10 w-10 mb-4 text-yellow-400 relative z-10" />
+            <Loader2 className="animate-spin h-10 w-10 text-yellow-400" />
         </div>
     );
 
     if (!user) {
         return (
-            <div className="min-h-screen w-full bg-black flex flex-col text-white relative p-8 justify-center overflow-y-auto">
+            <div className="min-h-screen w-full bg-black flex flex-col text-white relative p-8 justify-center overflow-y-auto" onClick={() => setHasInteracted(true)}>
                 <AppBackground />
                 <div className="relative z-10 text-center space-y-2 mb-12">
-                    <h1 className="text-6xl font-black italic tracking-tighter uppercase leading-none">PLAY 'N<br/><span className="text-yellow-400">PAYDAY</span></h1>
-                    <p className="text-xs font-bold tracking-[0.3em] text-white/40 uppercase italic">The Empire Awaits</p>
+                    <h1 className="text-6xl font-black italic tracking-tighter uppercase leading-none text-white">PLAY 'N<br/><span className="text-yellow-400">PAYDAY</span></h1>
                 </div>
                 <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 relative z-10 mx-auto text-left">
                     {!isLogin && (
                         <div className="bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                             <UserIcon className="h-5 w-5 text-white/40 mr-3" />
-                            <input type="text" placeholder="EMPIRE NAME" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 uppercase" value={username} onChange={e => setUsername(e.target.value)} required />
+                            <input type="text" placeholder="EMPIRE NAME" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 uppercase" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />
                         </div>
                     )}
                     <div className="bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md">
                         <Mail className="h-5 w-5 text-white/40 mr-3" />
-                        <input type="email" placeholder="EMAIL ADDRESS" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 uppercase" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="email" placeholder="EMAIL ADDRESS" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 uppercase" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
                     </div>
                     <div className="bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-4 backdrop-blur-md relative">
                         <Lock className="h-5 w-5 text-white/40 mr-3" />
-                        <input type={showPass ? "text" : "password"} placeholder="PASSWORD" handle-auto-focus="false" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-12" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <input type={showPass ? "text" : "password"} placeholder="PASSWORD" handle-auto-focus="false" className="bg-transparent outline-none w-full font-bold text-white placeholder:text-white/20 pr-12" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
                         <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-white/20">{showPass ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
                     </div>
                     {!isLogin && (
                         <div className="flex items-center gap-3 px-4 py-2">
-                            <input type="checkbox" id="terms" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="h-4 w-4 rounded border-white/10 bg-black/40 text-yellow-400" />
-                            <label htmlFor="terms" className="text-[10px] text-white/60 font-bold uppercase italic leading-tight">I am 18+ and agree to the Empire Code</label>
+                            <input type="checkbox" id="terms-pnp" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="h-4 w-4 rounded border-white/10 bg-black/40 text-yellow-400" />
+                            <label htmlFor="terms-pnp" className="text-[10px] text-white/60 font-bold uppercase italic leading-tight">I am 18+ and agree to the Empire Code</label>
                         </div>
                     )}
-                    <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all mt-4 flex items-center justify-center gap-2 italic">
+                    <button type="submit" disabled={loading} className="w-full bg-white text-black py-5 rounded-3xl font-black uppercase tracking-widest active:scale-95 transition-all mt-4 italic">
                         {loading && <Loader2 className="animate-spin h-5 w-5" />}
                         {isLogin ? 'Enter Empire' : 'Join Empire'}
                     </button>
@@ -310,6 +243,27 @@ export default function PlayNPaydayHub() {
                             </div>
                             <ChevronRight className="h-6 w-6 text-yellow-400/40 group-hover:text-yellow-400 transition-colors" />
                         </button>
+                        <section>
+                            <div className="flex items-center justify-between px-2 mb-4">
+                                <h3 className="text-xs font-black uppercase tracking-widest text-white/40 italic">Arcade Games</h3>
+                                <div className="h-px flex-1 mx-4 bg-white/10" />
+                                <Gamepad2 className="w-4 h-4 text-white/20" />
+                            </div>
+                            <div className="grid grid-cols-1 gap-2">
+                                {MINI_GAMES.map((game) => (
+                                    <button key={game.id} onClick={() => navigate({ to: "/game/$tableId", params: { tableId: game.id } })} className="bg-white/5 border border-white/5 rounded-2xl p-5 flex items-center justify-between active:bg-white/10 transition-colors group backdrop-blur-sm">
+                                        <div className="flex items-center gap-4 text-left">
+                                            <span className="text-2xl drop-shadow-md">{game.emoji}</span>
+                                            <span className="font-black uppercase italic text-sm tracking-tight text-white/90">{game.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[9px] font-black text-yellow-400 tracking-widest uppercase">Play Now</span>
+                                            <ArrowUpRight className="w-4 h-4 text-yellow-400/40 group-hover:text-yellow-400 transition-colors" />
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
                     </>
                 )}
                 {activeTab === 'history' && (
@@ -360,7 +314,13 @@ export default function PlayNPaydayHub() {
                                             </div>
                                         </div>
                                         {isUnlocked ? (
-                                            <button onClick={() => handlePayoutRequest(r)} className="bg-yellow-400 text-black text-[10px] font-black px-5 py-2.5 rounded-xl shadow-xl active:scale-95 transition-all italic">REDEEM</button>
+                                            <button onClick={() => {
+                                                const { data: { user } } = supabase.auth.getUser();
+                                                supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: r.name, points_cost: r.cost * 1000, status: 'pending' }).then(() => {
+                                                    addCash(-r.cost);
+                                                    toast.success("Submitted!");
+                                                });
+                                            }} className="bg-yellow-400 text-black text-[10px] font-black px-5 py-2.5 rounded-xl shadow-xl active:scale-95 transition-all italic">REDEEM</button>
                                         ) : <Lock className="w-4 h-4 text-white/20 mr-2" />}
                                     </div>
                                 )
@@ -373,28 +333,10 @@ export default function PlayNPaydayHub() {
                 <NavButton icon={Zap} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
                 <NavButton icon={History} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
                 <NavButton icon={Wallet} label="Wins" active={activeTab === 'wins'} onClick={() => handleTabChange('wins')} />
-                <NavButton icon={Info} label="Info" active={false} onClick={() => toast.info("Play 'n Payday v2.3 - High Stability")} />
+                <NavButton icon={Info} label="Info" active={false} onClick={() => toast.info("Play 'n Payday v2.4")} />
             </nav>
-            {showLegal && <LegalModal type={showLegal} onClose={() => setShowLegal(null)} />}
         </div>
     )
-}
-
-function LegalModal({ type, onClose }: { type: 'privacy' | 'terms' | 'faq' | 'rules', onClose: () => void }) {
-    const titles = { privacy: 'Privacy Policy', terms: 'Terms of Service', faq: 'F.A.Q.', rules: 'Official Rules' };
-    return (
-        <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-xl flex flex-col p-8 pt-20 animate-in fade-in duration-300 overflow-y-auto">
-            <button onClick={onClose} className="absolute top-8 left-8 text-white/40 uppercase font-black text-[10px] flex items-center gap-2 italic">
-                <ChevronRight className="h-4 w-4 rotate-180" /> Return
-            </button>
-            <h2 className="text-4xl font-black italic uppercase mb-8 mt-4 text-white">THE <span className="text-yellow-400">{titles[type]}</span></h2>
-            <div className="text-white/60 text-xs font-bold uppercase leading-relaxed space-y-4 pb-20">
-                {type === 'privacy' && <><p>We collect your email and username to manage rewards.</p><p className="text-yellow-400 font-black italic text-sm mt-4">ACCOUNT DELETION:</p><p>Email us at support@playnpayday.fun</p></>}
-                {type === 'terms' && <p>By using Play 'n Payday, you agree to our terms. Users must be 18+.</p>}
-                {type === 'rules' && <p>1. Enter portals to earn. 2. Payouts start at $5.00.</p>}
-            </div>
-        </div>
-    );
 }
 
 function NavButton({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
