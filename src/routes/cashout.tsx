@@ -20,35 +20,51 @@ const REWARDS = [
 
 function CashoutScreen() {
   const navigate = useNavigate();
-  const { user, profile, addCash, supabase, signOut } = useAuth();
+  const { user, profile, supabase } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const cashBalance = parseFloat(profile?.cash_balance || "0");
 
   const handlePayoutRequest = async (reward: any) => {
     if (isProcessing) return;
+
+    if (!user) {
+        toast.error("Please sign in first.");
+        return;
+    }
+
     if (cashBalance < reward.cost) {
         toast.error("Insufficient Balance");
         return;
     }
 
     setIsProcessing(true);
+
     try {
-        const { error } = await supabase.from('payout_requests').insert({
-            user_id: user?.id,
-            reward_name: reward.name,
-            points_cost: reward.cost * 1000,
-            status: 'pending'
+        const { data, error } = await supabase.rpc('request_payout', {
+            p_reward_name: reward.name
         });
-        if (error) throw error;
-        await addCash(-reward.cost);
+
+        if (error) {
+            throw error;
+        }
+
+        if (!data) {
+            throw new Error("Payout request was not created.");
+        }
+
         toast.success("Redemption Submitted!");
+
+        // Refresh the profile so the displayed balance updates.
+        window.location.reload();
+
     } catch (e: any) {
-        toast.error(e.message);
+        console.error("Payout request failed:", e);
+        toast.error(e.message || "Unable to submit redemption.");
     } finally {
         setIsProcessing(false);
     }
-  }
+}
 
   return (
     <div className="min-h-screen bg-black text-white font-sans select-none flex flex-col">
