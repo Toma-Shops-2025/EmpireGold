@@ -1,96 +1,91 @@
-// Play 'n Payday - High Performance Ads
-import { Capacitor } from "@capacitor/core";
+﻿import { Capacitor, registerPlugin } from "@capacitor/core";
 import { toast } from "sonner";
 
-const isNative = () => Capacitor.isNativePlatform();
-const UNITY_GAME_ID = "6168865";
+interface UnityAdsPlugin {
+  initialize(): Promise<{ success: boolean; error?: string }>;
+  showRewarded(): Promise<{ success: boolean; rewarded?: boolean }>;
+  showInterstitial(): Promise<void>;
+  showBanner(): Promise<void>;
+  hideBanner(): Promise<void>;
+}
 
-declare global {
-  interface Window {
-    unityads?: any;
+const UnityAds = registerPlugin<UnityAdsPlugin>("UnityAds");
+
+const isNative = () => Capacitor.isNativePlatform();
+
+let initialized = false;
+
+export async function initAds(): Promise<void> {
+  if (!isNative() || initialized) return;
+
+  try {
+    const result = await UnityAds.initialize();
+
+    if (result?.success) {
+      initialized = true;
+      console.log("Unity Ads initialized successfully");
+    } else {
+      console.error("Unity Ads initialization failed:", result?.error);
+    }
+  } catch (error) {
+    console.error("Unity Ads initialization error:", error);
   }
 }
 
-/** Initialize and Load Ads */
-export async function initAds(): Promise<void> {
-  if (!isNative()) return;
-
-  const startInit = () => {
-    if (window.unityads && typeof window.unityads.initialize === 'function') {
-      window.unityads.initialize(UNITY_GAME_ID, false, () => {
-        console.log("✅ Unity Ads Ready - Play 'n Payday");
-        if (typeof window.unityads.load === 'function') {
-            window.unityads.load("Rewarded_Android");
-            window.unityads.load("Interstitial_Android");
-            window.unityads.load("Banner_Android");
-        }
-      });
-    }
-  };
-
-  if (window.unityads) startInit();
-  else document.addEventListener("deviceready", startInit, { once: true });
-}
-
-/** Show a rewarded ad with Auto-Reload */
 export async function showRewardedAd(): Promise<{ success: boolean }> {
   if (!isNative()) {
     toast.info("Simulating Ad...");
     return { success: true };
   }
 
-  return new Promise((resolve) => {
-    if (!window.unityads || typeof window.unityads.show !== 'function') {
-      toast.error("Ad Engine not ready");
-      initAds();
-      resolve({ success: false });
-      return;
+  try {
+    if (!initialized) {
+      await initAds();
     }
 
-    window.unityads.show("Rewarded_Android", (res: any) => {
-      if (typeof window.unityads.load === 'function') {
-          window.unityads.load("Rewarded_Android");
-      }
+    const result = await UnityAds.showRewarded();
 
-      if (res === "COMPLETED") {
-        resolve({ success: true });
-      } else {
-        toast.error("Video skipped - no gold earned");
-        resolve({ success: false });
-      }
-    });
-  });
+    if (result?.success && result?.rewarded) {
+      return { success: true };
+    }
+
+    toast.error("Video not completed - no cash earned");
+    return { success: false };
+  } catch (error) {
+    console.error("Rewarded ad error:", error);
+    toast.error("Rewarded ad unavailable");
+    return { success: false };
+  }
 }
 
-/** Show an interstitial */
 export async function showInterstitial(): Promise<void> {
-    if (!isNative() || !window.unityads || typeof window.unityads.show !== 'function') return;
-    window.unityads.show("Interstitial_Android", () => {
-        if (typeof window.unityads.load === 'function') {
-            window.unityads.load("Interstitial_Android");
-        }
-    });
+  if (!isNative()) return;
+
+  try {
+    if (!initialized) {
+      await initAds();
+    }
+
+    await UnityAds.showInterstitial();
+  } catch (error) {
+    console.error("Interstitial ad error:", error);
+  }
 }
 
-/** Show/Hide Banner Ad */
-export function setBannerVisible(visible: boolean): void {
-    if (!isNative() || !window.unityads) return;
+export async function setBannerVisible(visible: boolean): Promise<void> {
+  if (!isNative()) return;
 
-    try {
-        if (visible) {
-            if (typeof window.unityads.showBanner === 'function') {
-                window.unityads.showBanner("Banner_Android");
-            } else if (typeof window.unityads.showBannerAd === 'function') {
-                window.unityads.showBannerAd("Banner_Android");
-            }
-        } else {
-            if (typeof window.unityads.hideBanner === 'function') {
-                window.unityads.hideBanner();
-            } else if (typeof window.unityads.hideBannerAd === 'function') {
-                window.unityads.hideBannerAd();
-            }
-        }
-    } catch (e) {
-        console.error("Banner Ad Error:", e);
+  try {
+    if (!initialized) {
+      await initAds();
     }
+
+    if (visible) {
+      await UnityAds.showBanner();
+    } else {
+      await UnityAds.hideBanner();
+    }
+  } catch (error) {
+    console.error("Banner ad error:", error);
+  }
 }

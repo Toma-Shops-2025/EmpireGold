@@ -136,7 +136,7 @@ function PlayNPaydayHub() {
 
             if (elapsedMinutes >= 1) {
                 const reward = 0.05 + (elapsedMinutes * 0.01);
-                await addCash(reward);
+                await addCash(Math.round(reward * 100000), 'playnpayday_action');
                 toast.success(`Royal Rewards! +$${reward.toFixed(2)}`, { icon: '👑' });
             }
         } else if (user) {
@@ -173,7 +173,7 @@ function PlayNPaydayHub() {
         try {
             const ad = await showRewardedAd();
             if (ad.success) {
-                await addCash(0.10);
+                await addCash(10000, 'playnpayday_action');
                 toast.success("Cash Earned!");
             }
         } catch (e) { console.error(e); } finally { setIsProcessing(false); }

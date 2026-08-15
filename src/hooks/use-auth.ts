@@ -54,22 +54,33 @@ export function useAuth() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  const addCash = useCallback(async (amount: number) => {
-    if (!user) return;
-    const val = parseFloat(amount.toFixed(4));
+  const addCash = useCallback(async (score: number, game = 'playnpayday_action') => {
+    if (!user) return 0;
+
     try {
-        // UNIFIED FUNCTION NAME
-        const { error: rpcError } = await supabase.rpc('claim_game_reward', {
-            p_game: 'playnpayday_action',
-            p_score: 0,
-            p_reward_est: val
+        const { data, error } = await supabase.rpc('claim_game_reward', {
+            p_game: game,
+            p_score: Math.floor(score)
         });
 
-        if (rpcError) {
-            console.error("Database update failed:", rpcError);
+        if (error) {
+            console.error("Reward claim failed:", error);
+            toast.error(error.message || "Unable to claim reward.");
+            return 0;
         }
-    } catch (e: any) { console.error(e); }
-  }, [user]);
+
+        const reward = Number(data || 0);
+
+        // Refresh the profile immediately after a successful reward.
+        await fetchProfile(user.id);
+
+        return reward;
+    } catch (e: any) {
+        console.error("Reward claim failed:", e);
+        toast.error(e.message || "Unable to claim reward.");
+        return 0;
+    }
+  }, [user, fetchProfile]);
 
   const signIn = useCallback(async (e: string, p: string) => {
       const { error } = await supabase.auth.signInWithPassword({ email: e, password: p });
