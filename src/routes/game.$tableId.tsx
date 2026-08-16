@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, Coins, Gift, Share2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { showInterstitial, showRewardedAd } from "@/lib/ads";
 import { toast } from "sonner";
+import { formatPoints, rewardToPoints } from "@/lib/points";
 
 export const Route = createFileRoute("/game/$tableId")({
   component: GameContainer,
@@ -80,11 +81,7 @@ function GameContainer() {
 
       if (!res.success) return;
 
-      // Convert the already-earned reward back into the score
-      // required by the server's score/100000 formula.
-      //
-      // Example:
-      // $0.25 reward -> score 25,000
+      // Convert earned points back into server score units for the double bonus.
       const doubleScore = Math.round(reward * 100000);
 
       const extraReward = await addCash(
@@ -94,7 +91,7 @@ function GameContainer() {
 
       if (extraReward > 0) {
         setDoubled(true);
-        toast.success(`REWARD DOUBLED! +$${extraReward.toFixed(2)}`);
+        toast.success(`DOUBLED! +${rewardToPoints(extraReward).toLocaleString()} Gold Points`);
       }
     } catch (e) {
       console.error("Double reward failed:", e);
@@ -156,12 +153,12 @@ function GameContainer() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-yellow-400/10 border border-yellow-400/20 rounded-2xl p-5 flex flex-col items-center gap-1">
                 <p className="text-[9px] font-black text-yellow-400 uppercase tracking-widest">
-                  Earnings
+                  Gold Points
                 </p>
 
                 <div className="flex items-center gap-2 font-black text-2xl italic">
                   <Coins className="w-4 h-4 text-yellow-400" />
-                  <span>+${reward.toFixed(2)}</span>
+                  <span>+{formatPoints(reward)}</span>
                 </div>
               </div>
 
@@ -183,7 +180,7 @@ function GameContainer() {
                 className="w-full bg-yellow-400 text-black py-5 rounded-2xl font-black text-base flex items-center justify-center gap-3 shadow-glow-yellow active:scale-95 transition-all disabled:opacity-50"
               >
                 <Gift className="w-6 h-6 fill-current" />
-                {processing ? "PROCESSING..." : "DOUBLE YOUR GOLD (AD)"}
+                {processing ? "PROCESSING..." : "DOUBLE POINTS (BONUS VIDEO)"}
               </button>
             )}
 

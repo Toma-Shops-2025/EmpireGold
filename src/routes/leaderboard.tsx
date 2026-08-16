@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Trophy, Crown, Medal, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { balanceToPoints, formatPoints, getEmpireRank } from "@/lib/points";
 
 export const Route = createFileRoute("/leaderboard")({
   component: LeaderboardScreen,
@@ -65,8 +66,12 @@ function LeaderboardScreen() {
                             </div>
                         </div>
                         <div className="text-right">
-                            <p className="text-lg font-black text-yellow-400 italic tabular-nums">${(u.cash_balance || 0).toFixed(2)}</p>
-                            <p className="text-[8px] text-white/20 font-black uppercase tracking-widest">Total Gold</p>
+                            <p className="text-lg font-black text-yellow-400 italic tabular-nums">
+                              {formatPoints(parseFloat(u.cash_balance?.toString() || "0"), true)}
+                            </p>
+                            <p className="text-[8px] text-white/20 font-black uppercase tracking-widest">
+                              {getEmpireRank(balanceToPoints(parseFloat(u.cash_balance?.toString() || "0"))).name}
+                            </p>
                         </div>
                     </div>
                 );
