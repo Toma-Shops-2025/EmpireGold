@@ -31,6 +31,7 @@ import {
   getEmpireRank,
   rewardToPoints,
 } from "@/lib/points";
+import { registerBgm, unregisterBgm, applyVolumeToAll, DEFAULT_VOLUME } from "@/lib/bgm-control";
 
 export const Route = createFileRoute("/")({
   component: PlayNPaydayHub,
@@ -99,7 +100,6 @@ function PlayNPaydayHub() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"home" | "history">("home");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [hasInteracted, setHasInteracted] = useState(false);
 
   const [history, setHistory] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem("pnp_history_v4");
@@ -135,7 +135,6 @@ function PlayNPaydayHub() {
         : await signUp(formData.email, formData.password, formData.username);
 
       if (res?.error) throw res.error;
-      setHasInteracted(true);
     } catch (error: any) {
       toast.error("Auth Failed", { description: error.message });
     } finally {
@@ -152,30 +151,35 @@ function PlayNPaydayHub() {
   const bgmRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (user && hasInteracted && !bgmRef.current) {
-      const audio = new Audio("/audio/promo.MP3");
-      audio.loop = true;
-      audio.volume = 0.15;
-      audio.play().catch(() => undefined);
-      bgmRef.current = audio;
-    }
+    if (!user) return;
+
+    const startBgm = () => {
+      if (!bgmRef.current) {
+        bgmRef.current = new Audio("/audio/promo.MP3");
+        bgmRef.current.loop = true;
+        registerBgm(bgmRef.current);
+      } else {
+        applyVolumeToAll();
+      }
+      bgmRef.current.play().catch(() => undefined);
+    };
+
+    startBgm();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") startBgm();
+    };
+    window.addEventListener("visibilitychange", onVisible);
+
     return () => {
+      window.removeEventListener("visibilitychange", onVisible);
       if (bgmRef.current) {
+        unregisterBgm(bgmRef.current);
         bgmRef.current.pause();
         bgmRef.current = null;
       }
     };
-  }, [user, hasInteracted]);
-
-  useEffect(() => {
-    const handleFirstInteraction = () => setHasInteracted(true);
-    window.addEventListener("click", handleFirstInteraction, { once: true });
-    window.addEventListener("touchstart", handleFirstInteraction, { once: true });
-    return () => {
-      window.removeEventListener("click", handleFirstInteraction);
-      window.removeEventListener("touchstart", handleFirstInteraction);
-    };
-  }, []);
+  }, [user]);
 
   const checkRewards = useCallback(async () => {
     const startTime = localStorage.getItem("pnp_session_start");
@@ -214,7 +218,6 @@ function PlayNPaydayHub() {
   }, [user, checkRewards]);
 
   const openPortal = async (portalId: string, url: string) => {
-    setHasInteracted(true);
     const newHistory = { ...history, [portalId]: Date.now() };
     setHistory(newHistory);
     localStorage.setItem("pnp_history_v4", JSON.stringify(newHistory));
@@ -230,7 +233,6 @@ function PlayNPaydayHub() {
   const handleWatchReward = async () => {
     if (isProcessing) return;
     setIsProcessing(true);
-    setHasInteracted(true);
     try {
       const ad = await showRewardedAd();
       if (ad.success) {
@@ -258,7 +260,6 @@ function PlayNPaydayHub() {
     return (
       <div
         className="min-h-screen w-full bg-black flex flex-col text-white relative p-8 justify-center overflow-y-auto"
-        onClick={() => setHasInteracted(true)}
       >
         <AppBackground />
         <div className="relative z-10 text-center space-y-2 mb-12">
