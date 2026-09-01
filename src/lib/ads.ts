@@ -68,7 +68,7 @@ export async function showRewardedAd(): Promise<{ success: boolean }> {
       return { success: true };
     }
 
-    toast.error("Video not completed - no Gold Points earned");
+    toast.error("Video not completed - no reward earned");
     return { success: false };
   } catch (error) {
     console.error("Rewarded ad error:", error);

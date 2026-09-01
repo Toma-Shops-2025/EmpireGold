@@ -82,6 +82,45 @@ export function useAuth() {
     }
   }, [user, fetchProfile]);
 
+  const deductCash = useCallback(async (dollarAmount: number) => {
+    if (!user || dollarAmount <= 0) return false;
+
+    try {
+      const { data: curr, error: fetchErr } = await supabase
+        .from('profiles')
+        .select('cash_balance')
+        .eq('id', user.id)
+        .single();
+
+      if (fetchErr || !curr) {
+        toast.error("Unable to read balance.");
+        return false;
+      }
+
+      const current = parseFloat(curr.cash_balance?.toString() || '0');
+      if (current < dollarAmount) {
+        toast.error("Insufficient balance.");
+        return false;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ cash_balance: Number((current - dollarAmount).toFixed(4)) })
+        .eq('id', user.id);
+
+      if (error) {
+        toast.error(error.message || "Unable to deduct balance.");
+        return false;
+      }
+
+      await fetchProfile(user.id);
+      return true;
+    } catch (e: any) {
+      toast.error(e.message || "Unable to deduct balance.");
+      return false;
+    }
+  }, [user, fetchProfile]);
+
   const signIn = useCallback(async (e: string, p: string) => {
       const { error } = await supabase.auth.signInWithPassword({ email: e, password: p });
       if (error) throw error;
@@ -97,5 +136,5 @@ export function useAuth() {
 
   const signOut = useCallback(() => supabase.auth.signOut(), []);
 
-  return { user, profile, loading, signIn, signUp, signOut, addCash, fetchProfile, supabase };
+  return { user, profile, loading, signIn, signUp, signOut, addCash, deductCash, fetchProfile, supabase };
 }

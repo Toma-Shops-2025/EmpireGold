@@ -27,9 +27,7 @@ import { showRewardedAd, showInterstitial, setBannerVisible } from "@/lib/ads";
 import { CONFIG } from "@/config";
 import {
   balanceToPoints,
-  formatPoints,
   getEmpireRank,
-  rewardToPoints,
 } from "@/lib/points";
 import { registerBgm, unregisterBgm, applyVolumeToAll, DEFAULT_VOLUME } from "@/lib/bgm-control";
 
@@ -195,11 +193,11 @@ function PlayNPaydayHub() {
       if (elapsedMinutes > 30) elapsedMinutes = 30;
 
       if (elapsedMinutes >= 1) {
-        const earned = await addCash(Math.round((0.05 + elapsedMinutes * 0.01) * 100000), "playnpayday_action");
+        // Match Loot Lagoon: max ~$0.10 per session, ~$0.02 base + $0.005/min
+        const dollars = Math.min(0.1, 0.02 + elapsedMinutes * 0.005);
+        const earned = await addCash(Math.round(dollars * 100000), "playnpayday_action");
         if (earned > 0) {
-          toast.success(`Session complete! +${rewardToPoints(earned).toLocaleString()} Gold Points`, {
-            icon: "👑",
-          });
+          toast.success(`Session complete! +$${Number(earned).toFixed(2)}`, { icon: "👑" });
         }
       }
     } else if (user) {
@@ -236,9 +234,9 @@ function PlayNPaydayHub() {
     try {
       const ad = await showRewardedAd();
       if (ad.success) {
-        const earned = await addCash(10000, "playnpayday_action");
-        const points = earned > 0 ? rewardToPoints(earned) : CONFIG.REWARDED_AD_POINTS;
-        toast.success(`+${points.toLocaleString()} Gold Points`);
+        const earned = await addCash(CONFIG.REWARDED_AD_SCORE, "playnpayday_action");
+        const label = earned > 0 ? `$${Number(earned).toFixed(2)}` : CONFIG.REWARDED_AD_LABEL;
+        toast.success(`+${label}`);
       }
     } catch (e) {
       console.error(e);
@@ -388,7 +386,7 @@ function PlayNPaydayHub() {
           <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2 shadow-2xl">
             <Coins className="w-4 h-4 text-yellow-400" />
             <span className="font-black text-lg tabular-nums tracking-tighter text-white italic">
-              {formatPoints(cashBalance, true)}
+              ${cashBalance.toFixed(2)}
             </span>
           </div>
           <button
@@ -454,7 +452,7 @@ function PlayNPaydayHub() {
                     {isProcessing ? "Loading..." : "Bonus Video"}
                   </span>
                   <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-[0.2em]">
-                    Earn +{CONFIG.REWARDED_AD_POINTS} Gold Points
+                    Earn +{CONFIG.REWARDED_AD_LABEL}
                   </span>
                 </div>
               </div>
@@ -512,7 +510,7 @@ function PlayNPaydayHub() {
         />
         <NavButton
           icon={Coins}
-          label="Rewards"
+          label="Wins"
           active={false}
           onClick={() => navigate({ to: "/cashout" })}
         />
@@ -521,7 +519,7 @@ function PlayNPaydayHub() {
           label="Info"
           active={false}
           onClick={() =>
-            toast.info(`${CONFIG.APP_NAME} v${CONFIG.VERSION} — Earn Gold Points, climb the Empire.`)
+            toast.info(`${CONFIG.APP_NAME} v${CONFIG.VERSION} — Play zones, earn balance, redeem gift cards.`)
           }
         />
       </nav>

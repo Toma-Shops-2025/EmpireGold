@@ -1,14 +1,15 @@
 export const CONFIG = {
   APP_NAME: "Play 'n Payday",
-  VERSION: "1.2",
+  VERSION: "1.3",
   DOMAIN: "playnpayday.fun",
   PRIVACY_URL: "https://playnpayday.fun/privacy",
   TERMS_URL: "https://playnpayday.fun/terms",
   IS_TESTING: false,
 
-  /** Shown on the optional rewarded-ad button — virtual in-app currency only. */
-  REWARDED_AD_POINTS: 10,
-
-  /** Milestone goals in Gold Points (display only). */
-  MILESTONE_POINTS: [500, 1000, 2500, 5000],
+  /**
+   * Score units sent to claim_game_reward for a rewarded ad.
+   * Server: ~100000 score ≈ $1.00 → 2000 score ≈ $0.02.
+   */
+  REWARDED_AD_SCORE: 2000,
+  REWARDED_AD_LABEL: "$0.02",
 };
