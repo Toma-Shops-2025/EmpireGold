@@ -41,11 +41,3 @@ desktop.ini
 
 # Local Netlify folder
 .netlify
-
-# Findr (Expo / API)
-findr/**/node_modules
-findr/**/dist
-findr/**/.expo
-findr/**/.env
-findr/**/.env.local
-findr/mobile/web-build
