@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /blog
+Disallow: /app/
+Disallow: /driver/
+Disallow: /login
+Disallow: /signup
+
+Sitemap: https://myrunner.shop/sitemap.xml

@@ -1,0 +1,1324 @@
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..f5ec888
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,2 @@
++# Copy to `.env` (gitignored) for local sync. Never commit real keys.
++BABYLOVEGROWTH_API_KEY=
+diff --git a/.github/workflows/babylovegrowth-sync.yml b/.github/workflows/babylovegrowth-sync.yml
+new file mode 100644
+index 0000000..ec3170e
+--- /dev/null
++++ b/.github/workflows/babylovegrowth-sync.yml
+@@ -0,0 +1,43 @@
++name: BabyLoveGrowth article sync
++
++on:
++  schedule:
++    # Daily at 14:00 UTC — keeps articles fresh without hitting rate limits
++    - cron: "0 14 * * *"
++  workflow_dispatch:
++
++permissions:
++  contents: write
++
++concurrency:
++  group: babylovegrowth-sync
++  cancel-in-progress: false
++
++jobs:
++  sync:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Checkout
++        uses: actions/checkout@v4
++
++      - name: Setup Node
++        uses: actions/setup-node@v4
++        with:
++          node-version: "22"
++
++      - name: Sync articles
++        env:
++          BABYLOVEGROWTH_API_KEY: ${{ secrets.BABYLOVEGROWTH_API_KEY }}
++        run: node scripts/sync-babylovegrowth.mjs
++
++      - name: Commit updated content
++        run: |
++          git config user.name "github-actions[bot]"
++          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
++          git add src/content/babylovegrowth/articles.json src/content/babylovegrowth/sync-state.json
++          if git diff --staged --quiet; then
++            echo "No article changes"
++          else
++            git commit -m "chore(blog): sync BabyLoveGrowth articles"
++            git push
++          fi
+diff --git a/package.json b/package.json
+index 681d7d3..a473e2e 100644
+--- a/package.json
++++ b/package.json
+@@ -10,6 +10,7 @@
+     "preview": "vite preview",
+     "lint": "eslint .",
+     "format": "prettier --write .",
++    "sync:babylovegrowth": "node scripts/sync-babylovegrowth.mjs",
+     "assets:generate": "npx @capacitor/assets generate --android --assetPath resources"
+   },
+   "dependencies": {
+diff --git a/public/robots.txt b/public/robots.txt
+index 36c04c3..818aaba 100644
+--- a/public/robots.txt
++++ b/public/robots.txt
+@@ -1,6 +1,9 @@
+ User-agent: *
+ Allow: /
++Allow: /blog
+ Disallow: /app/
+ Disallow: /driver/
+ Disallow: /login
+ Disallow: /signup
++
++Sitemap: https://myrunner.shop/sitemap.xml
+diff --git a/scripts/sync-babylovegrowth.mjs b/scripts/sync-babylovegrowth.mjs
+new file mode 100644
+index 0000000..b235f82
+--- /dev/null
++++ b/scripts/sync-babylovegrowth.mjs
+@@ -0,0 +1,325 @@
++#!/usr/bin/env node
++/**
++ * Sync BabyLoveGrowth articles into local storage (src/content/babylovegrowth/articles.json).
++ *
++ * Usage:
++ *   BABYLOVEGROWTH_API_KEY=... npm run sync:babylovegrowth
++ *
++ * Never call the API from page views — only this script / scheduled job.
++ * Rate limits: ≤2 req/s, ≤30/min. We wait ≥2100ms between calls.
++ */
++import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
++import { dirname, join } from "node:path";
++import { fileURLToPath } from "node:url";
++
++const __dirname = dirname(fileURLToPath(import.meta.url));
++const ROOT = join(__dirname, "..");
++const STORE_PATH = join(ROOT, "src/content/babylovegrowth/articles.json");
++const STATE_PATH = join(ROOT, "src/content/babylovegrowth/sync-state.json");
++
++const BASE = "https://api.babylovegrowth.ai/api/integrations";
++const USER_AGENT = "MyRunner/1.0 (+https://myrunner.shop)";
++const PAGE_LIMIT = 50;
++const MIN_GAP_MS = 2100;
++const DETAIL_BUDGET = 40;
++const CALL_BUDGET = 60;
++
++// --- sanitize (kept in sync with src/lib/babylovegrowth/sanitize.ts) ---
++function sanitizeArticleHtml(html) {
++  if (!html) return "";
++  let out = html;
++  out = out.replace(
++    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi,
++    "",
++  );
++  out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
++  out = out.replace(/<\/?(?:object|embed|base)\b[^>]*>/gi, "");
++  out = out.replace(/\s+srcdoc\s*=\s*(["'])[\s\S]*?\1/gi, "");
++  out = out.replace(/\s+on[a-z]+\s*=\s*(["'])[\s\S]*?\1/gi, "");
++  out = out.replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, "");
++  out = out.replace(
++    /\s+(href|src|xlink:href)\s*=\s*(["'])\s*(?:javascript|data):[\s\S]*?\2/gi,
++    "",
++  );
++  out = out.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, (tag) => {
++    const srcMatch = tag.match(/\ssrc\s*=\s*(["'])([^"']+)\1/i);
++    if (!srcMatch) return "";
++    let host = "";
++    try {
++      host = new URL(srcMatch[2]).hostname.replace(/^www\./, "");
++    } catch {
++      return "";
++    }
++    const allowed = new Set([
++      "youtube.com",
++      "youtube-nocookie.com",
++      "youtu.be",
++      "vimeo.com",
++      "player.vimeo.com",
++    ]);
++    if (!allowed.has(host) && !host.endsWith(".youtube.com") && !host.endsWith(".vimeo.com")) {
++      return "";
++    }
++    let cleaned = tag.replace(/\s+sandbox\s*=\s*(["'])[\s\S]*?\1/gi, "");
++    cleaned = cleaned.replace(
++      /<iframe\b/i,
++      '<iframe sandbox="allow-scripts allow-same-origin allow-presentation"',
++    );
++    return cleaned;
++  });
++  return out;
++}
++
++function loadJson(path, fallback) {
++  try {
++    return JSON.parse(readFileSync(path, "utf8"));
++  } catch {
++    return fallback;
++  }
++}
++
++function saveJson(path, data) {
++  mkdirSync(dirname(path), { recursive: true });
++  writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
++}
++
++function sleep(ms) {
++  return new Promise((r) => setTimeout(r, ms));
++}
++
++let nextAllowedAt = 0;
++let apiCalls = 0;
++
++async function apiGet(path) {
++  const key = process.env.BABYLOVEGROWTH_API_KEY;
++  if (!key) {
++    throw new Error(
++      "BABYLOVEGROWTH_API_KEY is not set. Add it to your environment (never commit the key).",
++    );
++  }
++
++  const wait = nextAllowedAt - Date.now();
++  if (wait > 0) await sleep(wait);
++
++  apiCalls += 1;
++  const res = await fetch(`${BASE}${path}`, {
++    method: "GET",
++    headers: {
++      "X-API-Key": key,
++      "Content-Type": "application/json",
++      "User-Agent": USER_AGENT,
++    },
++    signal: AbortSignal.timeout(15_000),
++  });
++
++  nextAllowedAt = Date.now() + MIN_GAP_MS;
++
++  if (res.status === 429) {
++    const retryAfter = Number(res.headers.get("Retry-After") || "60");
++    nextAllowedAt = Date.now() + retryAfter * 1000;
++    const err = new Error(`Rate limited (429). Retry-After=${retryAfter}s`);
++    err.code = 429;
++    throw err;
++  }
++  if (res.status === 401) {
++    const err = new Error("Unauthorized (401): check BABYLOVEGROWTH_API_KEY");
++    err.code = 401;
++    throw err;
++  }
++  if (res.status === 403) {
++    const err = new Error(
++      "Forbidden (403): usually a missing/blocked User-Agent — this script sets User-Agent: MyRunner/1.0",
++    );
++    err.code = 403;
++    throw err;
++  }
++  if (res.status === 404) {
++    const err = new Error(`Not found (404): ${path}`);
++    err.code = 404;
++    throw err;
++  }
++  if (!res.ok) {
++    const body = await res.text().catch(() => "");
++    throw new Error(`API ${res.status} for ${path}: ${body.slice(0, 200)}`);
++  }
++  return res.json();
++}
++
++function normalizeListPayload(payload) {
++  if (Array.isArray(payload)) return payload;
++  if (payload && Array.isArray(payload.articles)) return payload.articles;
++  if (payload && Array.isArray(payload.data)) return payload.data;
++  if (payload && Array.isArray(payload.items)) return payload.items;
++  return [];
++}
++
++function mapArticle(detail, existing) {
++  const slug = String(detail.slug || "").trim();
++  if (!slug) throw new Error(`Article ${detail.id} missing slug`);
++
++  const previousSlugs = [...(existing?.previousSlugs ?? [])];
++  if (existing?.slug && existing.slug !== slug && !previousSlugs.includes(existing.slug)) {
++    previousSlugs.push(existing.slug);
++  }
++
++  return {
++    id: detail.id,
++    title: detail.title ?? existing?.title ?? "Untitled",
++    slug,
++    previousSlugs,
++    meta_description: detail.meta_description ?? detail.metaDescription ?? null,
++    hero_image_url: detail.hero_image_url ?? detail.heroImageUrl ?? null,
++    content_html: sanitizeArticleHtml(detail.content_html ?? detail.contentHtml ?? ""),
++    content_markdown: detail.content_markdown ?? detail.contentMarkdown ?? null,
++    jsonLd: detail.jsonLd ?? detail.json_ld ?? null,
++    faqJsonLd: detail.faqJsonLd ?? detail.faq_json_ld ?? null,
++    languageCode: detail.languageCode ?? detail.language_code ?? null,
++    publishedAt:
++      detail.publishedAt ??
++      detail.published_at ??
++      detail.created_at ??
++      existing?.publishedAt ??
++      null,
++    created_at: detail.created_at ?? existing?.created_at ?? null,
++    updated_at: detail.updated_at ?? existing?.updated_at ?? null,
++    synced_at: new Date().toISOString(),
++  };
++}
++
++function needsDetail(summary, byId) {
++  const existing = byId.get(String(summary.id));
++  if (!existing) return true;
++  if (!existing.content_html) return true;
++  const remoteUpdated = Date.parse(summary.updated_at || "") || 0;
++  const localUpdated = Date.parse(existing.updated_at || "") || 0;
++  return remoteUpdated > localUpdated;
++}
++
++async function main() {
++  const store = loadJson(STORE_PATH, { syncedAt: null, articles: [] });
++  const state = loadJson(STATE_PATH, {
++    list_offset: 0,
++    list_complete: false,
++    last_run_at: null,
++  });
++
++  const byId = new Map(store.articles.map((a) => [String(a.id), a]));
++  let listOffset = state.list_offset || 0;
++  let listComplete = Boolean(state.list_complete);
++  let detailFetches = 0;
++  let synced = 0;
++  let hit429 = false;
++
++  console.log(
++    `[blg-sync] start offset=${listOffset} complete=${listComplete} stored=${byId.size}`,
++  );
++
++  // Fresh scan when previous scan finished
++  if (listComplete) {
++    listOffset = 0;
++    listComplete = false;
++  }
++
++  try {
++    while (apiCalls < CALL_BUDGET && detailFetches < DETAIL_BUDGET) {
++      const page = normalizeListPayload(
++        await apiGet(`/v1/articles?limit=${PAGE_LIMIT}&offset=${listOffset}`),
++      );
++
++      if (page.length === 0) {
++        listComplete = true;
++        listOffset = 0;
++        break;
++      }
++
++      let pageDone = true;
++      for (const summary of page) {
++        if (apiCalls >= CALL_BUDGET || detailFetches >= DETAIL_BUDGET) {
++          pageDone = false;
++          break;
++        }
++        if (!needsDetail(summary, byId)) continue;
++
++        try {
++          detailFetches += 1;
++          const detail = await apiGet(`/v1/articles/${summary.id}`);
++          const existing = byId.get(String(summary.id));
++          const mapped = mapArticle({ ...summary, ...detail }, existing);
++          byId.set(String(mapped.id), mapped);
++          synced += 1;
++          console.log(`[blg-sync] upsert slug=${mapped.slug} id=${mapped.id}`);
++        } catch (e) {
++          if (e.code === 404) {
++            console.warn(`[blg-sync] skip missing id=${summary.id}`);
++            continue;
++          }
++          if (e.code === 429) {
++            hit429 = true;
++            pageDone = false;
++            console.warn(`[blg-sync] ${e.message}`);
++            break;
++          }
++          throw e;
++        }
++      }
++
++      if (hit429) break;
++
++      if (pageDone) {
++        if (page.length < PAGE_LIMIT) {
++          listComplete = true;
++          listOffset = 0;
++          break;
++        }
++        listOffset += PAGE_LIMIT;
++      } else {
++        // Stay on this page so the next run finishes leftovers
++        break;
++      }
++    }
++  } finally {
++    const articles = [...byId.values()].sort((a, b) => {
++      const ta = Date.parse(a.publishedAt || a.created_at || "") || 0;
++      const tb = Date.parse(b.publishedAt || b.created_at || "") || 0;
++      return tb - ta;
++    });
++
++    saveJson(STORE_PATH, {
++      syncedAt: new Date().toISOString(),
++      articles,
++    });
++    saveJson(STATE_PATH, {
++      list_offset: listOffset,
++      list_complete: listComplete,
++      last_run_at: new Date().toISOString(),
++    });
++  }
++
++  console.log(
++    JSON.stringify(
++      {
++        synced,
++        total: byId.size,
++        apiCalls,
++        detailFetches,
++        listOffset,
++        listComplete,
++        hit429,
++        store: STORE_PATH,
++      },
++      null,
++      2,
++    ),
++  );
++
++  if (synced === 0 && byId.size === 0 && !hit429) {
++    console.warn(
++      "[blg-sync] No articles stored. Confirm the API key has published content in BabyLoveGrowth.",
++    );
++  }
++}
++
++main().catch((err) => {
++  console.error("[blg-sync] failed:", err.message || err);
++  process.exit(1);
++});
+diff --git a/src/components/site/footer.tsx b/src/components/site/footer.tsx
+index 3cada3c..c63e0d3 100644
+--- a/src/components/site/footer.tsx
++++ b/src/components/site/footer.tsx
+@@ -8,6 +8,7 @@ const cols = [
+       { to: "/how-it-works", label: "How it works" },
+       { to: "/pricing", label: "Pricing" },
+       { to: "/safety", label: "Safety & insurance" },
++      { to: "/blog", label: "Blog" },
+       { to: "/about", label: "About" },
+     ],
+   },
+diff --git a/src/components/site/header.tsx b/src/components/site/header.tsx
+index f61cf46..6131808 100644
+--- a/src/components/site/header.tsx
++++ b/src/components/site/header.tsx
+@@ -10,6 +10,7 @@ const nav = [
+   { to: "/pricing", label: "Pricing" },
+   { to: "/drivers", label: "Drive" },
+   { to: "/safety", label: "Safety" },
++  { to: "/blog", label: "Blog" },
+   { to: "/faq", label: "FAQ" },
+   { to: "/share", label: "Share" },
+ ] as const;
+diff --git a/src/content/babylovegrowth/articles.json b/src/content/babylovegrowth/articles.json
+new file mode 100644
+index 0000000..389466d
+--- /dev/null
++++ b/src/content/babylovegrowth/articles.json
+@@ -0,0 +1,4 @@
++{
++  "syncedAt": "2026-09-19T18:33:20.290Z",
++  "articles": []
++}
+diff --git a/src/content/babylovegrowth/sync-state.json b/src/content/babylovegrowth/sync-state.json
+new file mode 100644
+index 0000000..da18f78
+--- /dev/null
++++ b/src/content/babylovegrowth/sync-state.json
+@@ -0,0 +1,5 @@
++{
++  "list_offset": 0,
++  "list_complete": false,
++  "last_run_at": "2026-09-19T18:33:20.290Z"
++}
+diff --git a/src/lib/babylovegrowth/articles.server.ts b/src/lib/babylovegrowth/articles.server.ts
+new file mode 100644
+index 0000000..aee41fa
+--- /dev/null
++++ b/src/lib/babylovegrowth/articles.server.ts
+@@ -0,0 +1,58 @@
++import { createServerFn } from "@tanstack/react-start";
++import type { BlgArticle, BlgArticleStore, BlgArticleSummary } from "./types";
++import store from "@/content/babylovegrowth/articles.json";
++
++function getStore(): BlgArticleStore {
++  const data = store as BlgArticleStore;
++  return {
++    syncedAt: data.syncedAt ?? null,
++    articles: Array.isArray(data.articles) ? data.articles : [],
++  };
++}
++
++export function listArticlesFromStore(): BlgArticleSummary[] {
++  return getStore()
++    .articles.slice()
++    .sort((a, b) => {
++      const ta = Date.parse(a.publishedAt || a.created_at || "") || 0;
++      const tb = Date.parse(b.publishedAt || b.created_at || "") || 0;
++      return tb - ta;
++    })
++    .map((a) => ({
++      id: a.id,
++      title: a.title,
++      slug: a.slug,
++      meta_description: a.meta_description,
++      hero_image_url: a.hero_image_url,
++      languageCode: a.languageCode,
++      publishedAt: a.publishedAt,
++      created_at: a.created_at,
++      updated_at: a.updated_at,
++    }));
++}
++
++export function getArticleBySlugFromStore(slug: string): {
++  article: BlgArticle | null;
++  redirectFrom?: string;
++} {
++  const articles = getStore().articles;
++  const direct = articles.find((a) => a.slug === slug);
++  if (direct) return { article: direct };
++
++  const prev = articles.find((a) => (a.previousSlugs ?? []).includes(slug));
++  if (prev) return { article: prev, redirectFrom: slug };
++  return { article: null };
++}
++
++export const listBlgArticles = createServerFn({ method: "GET" }).handler(async () => {
++  return listArticlesFromStore();
++});
++
++export const getBlgArticleBySlug = createServerFn({ method: "GET" })
++  .inputValidator((d: unknown) => {
++    if (!d || typeof d !== "object" || typeof (d as { slug?: unknown }).slug !== "string") {
++      throw new Error("slug required");
++    }
++    return { slug: (d as { slug: string }).slug };
++  })
++  .handler(async ({ data }) => getArticleBySlugFromStore(data.slug));
+diff --git a/src/lib/babylovegrowth/jsonld.ts b/src/lib/babylovegrowth/jsonld.ts
+new file mode 100644
+index 0000000..f83c762
+--- /dev/null
++++ b/src/lib/babylovegrowth/jsonld.ts
+@@ -0,0 +1,77 @@
++const SITE_ORIGIN = "https://myrunner.shop";
++
++/** Absolute URL for a blog post on this site. */
++export function articleUrl(slug: string): string {
++  return `${SITE_ORIGIN}/blog/${slug}`;
++}
++
++export function siteOrigin(): string {
++  return SITE_ORIGIN;
++}
++
++/**
++ * Rewrite article URLs inside BabyLoveGrowth JSON-LD so they point at MyRunner,
++ * not the BLG-generated main-website URLs. Leaves author/publisher alone.
++ */
++export function rewriteJsonLdUrls(data: unknown, slug: string): unknown {
++  if (data == null) return data;
++  const live = articleUrl(slug);
++
++  const walk = (node: unknown, path: string[]): unknown => {
++    if (Array.isArray(node)) {
++      return node.map((item, i) => walk(item, [...path, String(i)]));
++    }
++    if (!node || typeof node !== "object") return node;
++
++    const obj = node as Record<string, unknown>;
++    const type = obj["@type"];
++    const types = Array.isArray(type) ? type.map(String) : type ? [String(type)] : [];
++    const out: Record<string, unknown> = {};
++
++    for (const [key, value] of Object.entries(obj)) {
++      if (key === "author" || key === "publisher") {
++        out[key] = value;
++        continue;
++      }
++
++      const isArticle = types.some((t) => /Article|BlogPosting|WebPage/i.test(t));
++      if (isArticle && (key === "url" || key === "mainEntityOfPage")) {
++        out[key] =
++          key === "mainEntityOfPage" && value && typeof value === "object"
++            ? walk({ ...(value as object), "@id": live, "@type": (value as { "@type"?: string })["@type"] ?? "WebPage" }, [
++                ...path,
++                key,
++              ])
++            : live;
++        continue;
++      }
++
++      if (types.includes("ListItem") && key === "item") {
++        // Only rewrite the last breadcrumb item (handled by parent BreadcrumbList)
++        out[key] = value;
++        continue;
++      }
++
++      if (types.includes("BreadcrumbList") && key === "itemListElement" && Array.isArray(value)) {
++        out[key] = value.map((item, idx) => {
++          const walked = walk(item, [...path, key, String(idx)]) as Record<string, unknown>;
++          if (idx === value.length - 1 && walked && typeof walked === "object") {
++            return { ...walked, item: live };
++          }
++          return walked;
++        });
++        continue;
++      }
++
++      out[key] = walk(value, [...path, key]);
++    }
++    return out;
++  };
++
++  return walk(data, []);
++}
++
++/** Safe JSON-LD serialization for <script type="application/ld+json">. */
++export function serializeJsonLd(data: unknown): string {
++  return JSON.stringify(data).replace(/</g, "\\u003c");
++}
+diff --git a/src/lib/babylovegrowth/sanitize.ts b/src/lib/babylovegrowth/sanitize.ts
+new file mode 100644
+index 0000000..e0f69bd
+--- /dev/null
++++ b/src/lib/babylovegrowth/sanitize.ts
+@@ -0,0 +1,63 @@
++/**
++ * Sanitize BabyLoveGrowth HTML once at sync time so pages can render trustedly.
++ * Strips JSON-LD script blocks (re-injected in head), event handlers, dangerous
++ * URLs, and untrusted embeds — matching BabyLoveGrowth Lovable integration rules.
++ */
++export function sanitizeArticleHtml(html: string): string {
++  if (!html) return "";
++  let out = html;
++
++  // Strip JSON-LD script blocks (we re-inject corrected schema in <head>)
++  out = out.replace(
++    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi,
++    "",
++  );
++  // Strip any remaining script tags
++  out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
++
++  // Drop object / embed / base
++  out = out.replace(/<\/?(?:object|embed|base)\b[^>]*>/gi, "");
++
++  // Drop srcdoc attributes
++  out = out.replace(/\s+srcdoc\s*=\s*(["'])[\s\S]*?\1/gi, "");
++
++  // Drop on* event handlers
++  out = out.replace(/\s+on[a-z]+\s*=\s*(["'])[\s\S]*?\1/gi, "");
++  out = out.replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, "");
++
++  // Drop javascript: / data: in href, src, xlink:href
++  out = out.replace(
++    /\s+(href|src|xlink:href)\s*=\s*(["'])\s*(?:javascript|data):[\s\S]*?\2/gi,
++    "",
++  );
++
++  // iframe: keep only youtube / vimeo; sandbox them
++  out = out.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, (tag) => {
++    const srcMatch = tag.match(/\ssrc\s*=\s*(["'])([^"']+)\1/i);
++    if (!srcMatch) return "";
++    let host = "";
++    try {
++      host = new URL(srcMatch[2]).hostname.replace(/^www\./, "");
++    } catch {
++      return "";
++    }
++    const allowed = new Set([
++      "youtube.com",
++      "youtube-nocookie.com",
++      "youtu.be",
++      "vimeo.com",
++      "player.vimeo.com",
++    ]);
++    if (!allowed.has(host) && !host.endsWith(".youtube.com") && !host.endsWith(".vimeo.com")) {
++      return "";
++    }
++    let cleaned = tag.replace(/\s+sandbox\s*=\s*(["'])[\s\S]*?\1/gi, "");
++    cleaned = cleaned.replace(
++      /<iframe\b/i,
++      '<iframe sandbox="allow-scripts allow-same-origin allow-presentation"',
++    );
++    return cleaned;
++  });
++
++  return out;
++}
+diff --git a/src/lib/babylovegrowth/types.ts b/src/lib/babylovegrowth/types.ts
+new file mode 100644
+index 0000000..a09fcac
+--- /dev/null
++++ b/src/lib/babylovegrowth/types.ts
+@@ -0,0 +1,36 @@
++/** BabyLoveGrowth article as stored locally (synced; never fetched on page view). */
++export type BlgArticle = {
++  id: number | string;
++  title: string;
++  slug: string;
++  previousSlugs: string[];
++  meta_description: string | null;
++  hero_image_url: string | null;
++  content_html: string;
++  content_markdown: string | null;
++  jsonLd: unknown | null;
++  faqJsonLd: unknown | null;
++  languageCode: string | null;
++  publishedAt: string | null;
++  created_at: string | null;
++  updated_at: string | null;
++  synced_at: string;
++};
++
++export type BlgArticleStore = {
++  syncedAt: string | null;
++  articles: BlgArticle[];
++};
++
++export type BlgArticleSummary = Pick<
++  BlgArticle,
++  | "id"
++  | "title"
++  | "slug"
++  | "meta_description"
++  | "hero_image_url"
++  | "languageCode"
++  | "publishedAt"
++  | "created_at"
++  | "updated_at"
++>;
+diff --git a/src/routeTree.gen.ts b/src/routeTree.gen.ts
+index 1939071..4fba29b 100644
+--- a/src/routeTree.gen.ts
++++ b/src/routeTree.gen.ts
+@@ -26,6 +26,7 @@ import { Route as DriverRouteImport } from './routes/driver'
+ import { Route as CookiesRouteImport } from './routes/cookies'
+ import { Route as ContactRouteImport } from './routes/contact'
+ import { Route as CommunityGuidelinesRouteImport } from './routes/community-guidelines'
++import { Route as BlogRouteImport } from './routes/blog'
+ import { Route as AppRouteImport } from './routes/app'
+ import { Route as AdminRouteImport } from './routes/admin'
+ import { Route as AccessibilityRouteImport } from './routes/accessibility'
+@@ -34,6 +35,7 @@ import { Route as IndexRouteImport } from './routes/index'
+ import { Route as RIdRouteImport } from './routes/r.$id'
+ import { Route as DriverEarningsRouteImport } from './routes/driver.earnings'
+ import { Route as DriverDashboardRouteImport } from './routes/driver.dashboard'
++import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
+ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+ import { Route as AppSettingsRouteImport } from './routes/app.settings'
+ import { Route as AppReportRouteImport } from './routes/app.report'
+@@ -137,6 +139,11 @@ const CommunityGuidelinesRoute = CommunityGuidelinesRouteImport.update({
+   path: '/community-guidelines',
+   getParentRoute: () => rootRouteImport,
+ } as any)
++const BlogRoute = BlogRouteImport.update({
++  id: '/blog',
++  path: '/blog',
++  getParentRoute: () => rootRouteImport,
++} as any)
+ const AppRoute = AppRouteImport.update({
+   id: '/app',
+   path: '/app',
+@@ -177,6 +184,11 @@ const DriverDashboardRoute = DriverDashboardRouteImport.update({
+   path: '/dashboard',
+   getParentRoute: () => DriverRoute,
+ } as any)
++const BlogSlugRoute = BlogSlugRouteImport.update({
++  id: '/$slug',
++  path: '/$slug',
++  getParentRoute: () => BlogRoute,
++} as any)
+ const AuthCallbackRoute = AuthCallbackRouteImport.update({
+   id: '/auth/callback',
+   path: '/auth/callback',
+@@ -272,6 +284,7 @@ export interface FileRoutesByFullPath {
+   '/accessibility': typeof AccessibilityRoute
+   '/admin': typeof AdminRouteWithChildren
+   '/app': typeof AppRouteWithChildren
++  '/blog': typeof BlogRouteWithChildren
+   '/community-guidelines': typeof CommunityGuidelinesRoute
+   '/contact': typeof ContactRoute
+   '/cookies': typeof CookiesRoute
+@@ -300,6 +313,7 @@ export interface FileRoutesByFullPath {
+   '/app/report': typeof AppReportRoute
+   '/app/settings': typeof AppSettingsRoute
+   '/auth/callback': typeof AuthCallbackRoute
++  '/blog/$slug': typeof BlogSlugRoute
+   '/driver/dashboard': typeof DriverDashboardRoute
+   '/driver/earnings': typeof DriverEarningsRoute
+   '/r/$id': typeof RIdRoute
+@@ -316,6 +330,7 @@ export interface FileRoutesByTo {
+   '/accessibility': typeof AccessibilityRoute
+   '/admin': typeof AdminRouteWithChildren
+   '/app': typeof AppRouteWithChildren
++  '/blog': typeof BlogRouteWithChildren
+   '/community-guidelines': typeof CommunityGuidelinesRoute
+   '/contact': typeof ContactRoute
+   '/cookies': typeof CookiesRoute
+@@ -344,6 +359,7 @@ export interface FileRoutesByTo {
+   '/app/report': typeof AppReportRoute
+   '/app/settings': typeof AppSettingsRoute
+   '/auth/callback': typeof AuthCallbackRoute
++  '/blog/$slug': typeof BlogSlugRoute
+   '/driver/dashboard': typeof DriverDashboardRoute
+   '/driver/earnings': typeof DriverEarningsRoute
+   '/r/$id': typeof RIdRoute
+@@ -361,6 +377,7 @@ export interface FileRoutesById {
+   '/accessibility': typeof AccessibilityRoute
+   '/admin': typeof AdminRouteWithChildren
+   '/app': typeof AppRouteWithChildren
++  '/blog': typeof BlogRouteWithChildren
+   '/community-guidelines': typeof CommunityGuidelinesRoute
+   '/contact': typeof ContactRoute
+   '/cookies': typeof CookiesRoute
+@@ -389,6 +406,7 @@ export interface FileRoutesById {
+   '/app/report': typeof AppReportRoute
+   '/app/settings': typeof AppSettingsRoute
+   '/auth/callback': typeof AuthCallbackRoute
++  '/blog/$slug': typeof BlogSlugRoute
+   '/driver/dashboard': typeof DriverDashboardRoute
+   '/driver/earnings': typeof DriverEarningsRoute
+   '/r/$id': typeof RIdRoute
+@@ -407,6 +425,7 @@ export interface FileRouteTypes {
+     | '/accessibility'
+     | '/admin'
+     | '/app'
++    | '/blog'
+     | '/community-guidelines'
+     | '/contact'
+     | '/cookies'
+@@ -435,6 +454,7 @@ export interface FileRouteTypes {
+     | '/app/report'
+     | '/app/settings'
+     | '/auth/callback'
++    | '/blog/$slug'
+     | '/driver/dashboard'
+     | '/driver/earnings'
+     | '/r/$id'
+@@ -451,6 +471,7 @@ export interface FileRouteTypes {
+     | '/accessibility'
+     | '/admin'
+     | '/app'
++    | '/blog'
+     | '/community-guidelines'
+     | '/contact'
+     | '/cookies'
+@@ -479,6 +500,7 @@ export interface FileRouteTypes {
+     | '/app/report'
+     | '/app/settings'
+     | '/auth/callback'
++    | '/blog/$slug'
+     | '/driver/dashboard'
+     | '/driver/earnings'
+     | '/r/$id'
+@@ -495,6 +517,7 @@ export interface FileRouteTypes {
+     | '/accessibility'
+     | '/admin'
+     | '/app'
++    | '/blog'
+     | '/community-guidelines'
+     | '/contact'
+     | '/cookies'
+@@ -523,6 +546,7 @@ export interface FileRouteTypes {
+     | '/app/report'
+     | '/app/settings'
+     | '/auth/callback'
++    | '/blog/$slug'
+     | '/driver/dashboard'
+     | '/driver/earnings'
+     | '/r/$id'
+@@ -540,6 +564,7 @@ export interface RootRouteChildren {
+   AccessibilityRoute: typeof AccessibilityRoute
+   AdminRoute: typeof AdminRouteWithChildren
+   AppRoute: typeof AppRouteWithChildren
++  BlogRoute: typeof BlogRouteWithChildren
+   CommunityGuidelinesRoute: typeof CommunityGuidelinesRoute
+   ContactRoute: typeof ContactRoute
+   CookiesRoute: typeof CookiesRoute
+@@ -686,6 +711,13 @@ declare module '@tanstack/react-router' {
+       preLoaderRoute: typeof CommunityGuidelinesRouteImport
+       parentRoute: typeof rootRouteImport
+     }
++    '/blog': {
++      id: '/blog'
++      path: '/blog'
++      fullPath: '/blog'
++      preLoaderRoute: typeof BlogRouteImport
++      parentRoute: typeof rootRouteImport
++    }
+     '/app': {
+       id: '/app'
+       path: '/app'
+@@ -742,6 +774,13 @@ declare module '@tanstack/react-router' {
+       preLoaderRoute: typeof DriverDashboardRouteImport
+       parentRoute: typeof DriverRoute
+     }
++    '/blog/$slug': {
++      id: '/blog/$slug'
++      path: '/$slug'
++      fullPath: '/blog/$slug'
++      preLoaderRoute: typeof BlogSlugRouteImport
++      parentRoute: typeof BlogRoute
++    }
+     '/auth/callback': {
+       id: '/auth/callback'
+       path: '/auth/callback'
+@@ -912,6 +951,16 @@ const AppRouteChildren: AppRouteChildren = {
+ 
+ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+ 
++interface BlogRouteChildren {
++  BlogSlugRoute: typeof BlogSlugRoute
++}
++
++const BlogRouteChildren: BlogRouteChildren = {
++  BlogSlugRoute: BlogSlugRoute,
++}
++
++const BlogRouteWithChildren = BlogRoute._addFileChildren(BlogRouteChildren)
++
+ interface DriverRouteChildren {
+   DriverDashboardRoute: typeof DriverDashboardRoute
+   DriverEarningsRoute: typeof DriverEarningsRoute
+@@ -933,6 +982,7 @@ const rootRouteChildren: RootRouteChildren = {
+   AccessibilityRoute: AccessibilityRoute,
+   AdminRoute: AdminRouteWithChildren,
+   AppRoute: AppRouteWithChildren,
++  BlogRoute: BlogRouteWithChildren,
+   CommunityGuidelinesRoute: CommunityGuidelinesRoute,
+   ContactRoute: ContactRoute,
+   CookiesRoute: CookiesRoute,
+diff --git a/src/routes/blog.$slug.tsx b/src/routes/blog.$slug.tsx
+new file mode 100644
+index 0000000..3bea9d7
+--- /dev/null
++++ b/src/routes/blog.$slug.tsx
+@@ -0,0 +1,105 @@
++import { createFileRoute, Link, redirect, notFound } from "@tanstack/react-router";
++import { PageShell } from "@/components/site/page-shell";
++import { getBlgArticleBySlug } from "@/lib/babylovegrowth/articles.server";
++import {
++  articleUrl,
++  rewriteJsonLdUrls,
++  serializeJsonLd,
++} from "@/lib/babylovegrowth/jsonld";
++
++export const Route = createFileRoute("/blog/$slug")({
++  loader: async ({ params }) => {
++    const result = await getBlgArticleBySlug({ data: { slug: params.slug } });
++    if (!result.article) throw notFound();
++    if (result.redirectFrom && result.article.slug !== params.slug) {
++      throw redirect({
++        to: "/blog/$slug",
++        params: { slug: result.article.slug },
++      });
++    }
++    return { article: result.article };
++  },
++  head: ({ loaderData }) => {
++    const article = loaderData?.article;
++    if (!article) {
++      return { meta: [{ title: "Article — MyRunner" }] };
++    }
++    const url = articleUrl(article.slug);
++    const description = article.meta_description || article.title;
++    const scripts: Array<{ type: string; children: string }> = [];
++
++    if (article.jsonLd) {
++      scripts.push({
++        type: "application/ld+json",
++        children: serializeJsonLd(rewriteJsonLdUrls(article.jsonLd, article.slug)),
++      });
++    }
++    if (article.faqJsonLd) {
++      scripts.push({
++        type: "application/ld+json",
++        children: serializeJsonLd(rewriteJsonLdUrls(article.faqJsonLd, article.slug)),
++      });
++    }
++
++    return {
++      meta: [
++        { title: `${article.title} — MyRunner` },
++        { name: "description", content: description },
++        { property: "og:title", content: article.title },
++        { property: "og:description", content: description },
++        { property: "og:url", content: url },
++        { property: "og:type", content: "article" },
++        ...(article.hero_image_url
++          ? [
++              { property: "og:image", content: article.hero_image_url },
++              { name: "twitter:card", content: "summary_large_image" },
++              { name: "twitter:image", content: article.hero_image_url },
++            ]
++          : [{ name: "twitter:card", content: "summary" }]),
++        ...(article.publishedAt
++          ? [{ property: "article:published_time", content: article.publishedAt }]
++          : []),
++      ],
++      links: [{ rel: "canonical", href: `/blog/${article.slug}` }],
++      scripts,
++    };
++  },
++  component: BlogArticle,
++  notFoundComponent: () => (
++    <PageShell>
++      <section className="container-app py-20 text-center">
++        <h1 className="font-serif text-4xl">Article not found</h1>
++        <p className="mt-3 text-muted-foreground">This post may have moved or been removed.</p>
++        <Link to="/blog" className="mt-6 inline-block text-gold hover:underline">
++          Back to blog
++        </Link>
++      </section>
++    </PageShell>
++  ),
++});
++
++function BlogArticle() {
++  const { article } = Route.useLoaderData();
++
++  return (
++    <PageShell backFallback="/blog">
++      <article
++        lang={article.languageCode || undefined}
++        className="container-app pb-24 pt-6"
++      >
++        <Link
++          to="/blog"
++          className="text-sm text-muted-foreground transition-colors hover:text-gold"
++        >
++          ← Back to blog
++        </Link>
++
++        {/* content_html from BabyLoveGrowth already includes h1 + hero — do not duplicate */}
++        <div
++          className="prose-blg mx-auto mt-8 max-w-3xl"
++          dangerouslySetInnerHTML={{ __html: article.content_html }}
++        />
++      </article>
++    </PageShell>
++  );
++}
+diff --git a/src/routes/blog.tsx b/src/routes/blog.tsx
+new file mode 100644
+index 0000000..6c6e2c1
+--- /dev/null
++++ b/src/routes/blog.tsx
+@@ -0,0 +1,118 @@
++import { createFileRoute, Link } from "@tanstack/react-router";
++import { PageShell } from "@/components/site/page-shell";
++import { listBlgArticles } from "@/lib/babylovegrowth/articles.server";
++
++export const Route = createFileRoute("/blog")({
++  loader: async () => {
++    const articles = await listBlgArticles();
++    return { articles };
++  },
++  head: () => ({
++    meta: [
++      { title: "Blog — MyRunner delivery tips & guides" },
++      {
++        name: "description",
++        content:
++          "Guides and updates from MyRunner — on-demand local delivery for anything, anytime, anywhere.",
++      },
++      { property: "og:title", content: "MyRunner Blog" },
++      {
++        property: "og:description",
++        content: "Tips, guides, and updates for MyRunner customers and drivers.",
++      },
++      { property: "og:url", content: "/blog" },
++      { property: "og:type", content: "website" },
++    ],
++    links: [{ rel: "canonical", href: "/blog" }],
++  }),
++  component: BlogIndex,
++});
++
++function BlogIndex() {
++  const { articles } = Route.useLoaderData();
++  const languages = [...new Set(articles.map((a) => a.languageCode).filter(Boolean))];
++
++  return (
++    <PageShell>
++      <section className="container-app py-20">
++        <p className="text-xs uppercase tracking-widest text-gold">Blog</p>
++        <h1 className="mt-3 font-serif text-6xl leading-[1.05]">Stories &amp; guides.</h1>
++        <p className="mt-4 max-w-xl text-muted-foreground">
++          Practical delivery tips and MyRunner updates — synced from our content library.
++        </p>
++        {languages.length > 1 ? (
++          <p className="mt-2 text-xs text-muted-foreground">
++            Languages live: {languages.join(", ")}
++          </p>
++        ) : null}
++      </section>
++
++      <section className="container-app pb-24">
++        {articles.length === 0 ? (
++          <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card px-8 py-12 text-center">
++            <h2 className="font-serif text-2xl">No articles yet</h2>
++            <p className="mt-3 text-sm text-muted-foreground">
++              Run <code className="text-gold">npm run sync:babylovegrowth</code> with{" "}
++              <code className="text-gold">BABYLOVEGROWTH_API_KEY</code> set, or wait for the
++              scheduled GitHub Action sync.
++            </p>
++          </div>
++        ) : (
++          <ul className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
++            {articles.map((article) => {
++              const dateLabel = formatDate(article.publishedAt || article.created_at);
++              return (
++                <li key={article.slug} lang={article.languageCode || undefined}>
++                  <Link
++                    to="/blog/$slug"
++                    params={{ slug: article.slug }}
++                    className="group block h-full overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-gold/40"
++                  >
++                    {article.hero_image_url ? (
++                      <div className="aspect-[16/10] overflow-hidden bg-surface">
++                        <img
++                          src={article.hero_image_url}
++                          alt=""
++                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
++                          loading="lazy"
++                        />
++                      </div>
++                    ) : (
++                      <div className="aspect-[16/10] bg-noise bg-surface" />
++                    )}
++                    <div className="p-5">
++                      {dateLabel ? (
++                        <p className="text-xs uppercase tracking-widest text-muted-foreground">
++                          {dateLabel}
++                        </p>
++                      ) : null}
++                      <h2 className="mt-2 font-serif text-2xl leading-snug group-hover:text-gold">
++                        {article.title}
++                      </h2>
++                      {article.meta_description ? (
++                        <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
++                          {article.meta_description}
++                        </p>
++                      ) : null}
++                    </div>
++                  </Link>
++                </li>
++              );
++            })}
++          </ul>
++        )}
++      </section>
++    </PageShell>
++  );
++}
++
++function formatDate(value: string | null | undefined) {
++  if (!value) return null;
++  const t = Date.parse(value);
++  if (!Number.isFinite(t)) return null;
++  return new Date(t).toLocaleDateString("en-US", {
++    year: "numeric",
++    month: "short",
++    day: "numeric",
++  });
++}
+diff --git a/src/routes/sitemap[.]xml.ts b/src/routes/sitemap[.]xml.ts
+index c6e8f7e..8c8a868 100644
+--- a/src/routes/sitemap[.]xml.ts
++++ b/src/routes/sitemap[.]xml.ts
+@@ -1,15 +1,18 @@
+ import { createFileRoute } from "@tanstack/react-router";
+ import type {} from "@tanstack/react-start";
++import { listArticlesFromStore } from "@/lib/babylovegrowth/articles.server";
++import { siteOrigin } from "@/lib/babylovegrowth/jsonld";
+ 
+-const BASE_URL = "";
++const BASE_URL = siteOrigin();
+ 
+-const entries = [
++const staticEntries = [
+   { path: "/", priority: "1.0", changefreq: "weekly" as const },
+   { path: "/how-it-works", priority: "0.8", changefreq: "monthly" as const },
+   { path: "/pricing", priority: "0.9", changefreq: "monthly" as const },
+   { path: "/drivers", priority: "0.9", changefreq: "monthly" as const },
+   { path: "/driver-signup", priority: "0.7", changefreq: "monthly" as const },
+   { path: "/safety", priority: "0.7", changefreq: "monthly" as const },
++  { path: "/blog", priority: "0.8", changefreq: "daily" as const },
+   { path: "/about", priority: "0.6", changefreq: "yearly" as const },
+   { path: "/contact", priority: "0.6", changefreq: "yearly" as const },
+   { path: "/faq", priority: "0.8", changefreq: "monthly" as const },
+@@ -25,20 +28,42 @@ export const Route = createFileRoute("/sitemap.xml")({
+   server: {
+     handlers: {
+       GET: async () => {
++        const articles = listArticlesFromStore();
++        const articleEntries = articles.map((a) => {
++          const lastmod = a.updated_at || a.publishedAt || a.created_at;
++          return [
++            `  <url>`,
++            `    <loc>${BASE_URL}/blog/${a.slug}</loc>`,
++            lastmod ? `    <lastmod>${new Date(lastmod).toISOString()}</lastmod>` : null,
++            `    <changefreq>weekly</changefreq>`,
++            `    <priority>0.7</priority>`,
++            `  </url>`,
++          ]
++            .filter(Boolean)
++            .join("\n");
++        });
++
+         const xml = [
+           `<?xml version="1.0" encoding="UTF-8"?>`,
+           `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
+-          ...entries.map((e) => [
+-            `  <url>`,
+-            `    <loc>${BASE_URL}${e.path}</loc>`,
+-            `    <changefreq>${e.changefreq}</changefreq>`,
+-            `    <priority>${e.priority}</priority>`,
+-            `  </url>`,
+-          ].join("\n")),
++          ...staticEntries.map((e) =>
++            [
++              `  <url>`,
++              `    <loc>${BASE_URL}${e.path}</loc>`,
++              `    <changefreq>${e.changefreq}</changefreq>`,
++              `    <priority>${e.priority}</priority>`,
++              `  </url>`,
++            ].join("\n"),
++          ),
++          ...articleEntries,
+           `</urlset>`,
+         ].join("\n");
++
+         return new Response(xml, {
+-          headers: { "Content-Type": "application/xml", "Cache-Control": "public, max-age=3600" },
++          headers: {
++            "Content-Type": "application/xml",
++            "Cache-Control": "public, max-age=3600",
++          },
+         });
+       },
+     },
+diff --git a/src/styles.css b/src/styles.css
+index b4bae25..bcd357e 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -167,6 +167,90 @@
+   animation: shimmer 6s linear infinite;
+ }
+ 
++/* BabyLoveGrowth article body */
++.prose-blg {
++  color: color-mix(in oklab, var(--foreground) 88%, transparent);
++  font-size: 1.05rem;
++  line-height: 1.75;
++}
++.prose-blg :where(h1, h2, h3, h4) {
++  color: var(--foreground);
++  margin-top: 1.75em;
++  margin-bottom: 0.6em;
++  line-height: 1.15;
++}
++.prose-blg :where(h1) {
++  font-size: clamp(2.25rem, 5vw, 3.5rem);
++  margin-top: 0;
++}
++.prose-blg :where(h2) {
++  font-size: 1.75rem;
++}
++.prose-blg :where(h3) {
++  font-size: 1.35rem;
++}
++.prose-blg :where(p, ul, ol, table, blockquote) {
++  margin-block: 1em;
++}
++.prose-blg :where(ul) {
++  list-style: disc;
++  padding-left: 1.35rem;
++}
++.prose-blg :where(ol) {
++  list-style: decimal;
++  padding-left: 1.35rem;
++}
++.prose-blg :where(li) {
++  margin-block: 0.35em;
++}
++.prose-blg :where(a) {
++  color: var(--gold);
++  text-decoration: underline;
++  text-underline-offset: 3px;
++}
++.prose-blg :where(img) {
++  display: block;
++  max-width: 100%;
++  height: auto;
++  border-radius: 0.75rem;
++  margin-block: 1.25em;
++}
++.prose-blg :where(blockquote) {
++  border-left: 3px solid var(--gold);
++  padding-left: 1rem;
++  font-family: var(--font-serif);
++  font-style: italic;
++  color: var(--foreground);
++}
++.prose-blg :where(pre, code) {
++  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
++  font-size: 0.9em;
++}
++.prose-blg :where(pre) {
++  overflow-x: auto;
++  border-radius: 0.75rem;
++  border: 1px solid var(--border);
++  background: var(--surface);
++  padding: 1rem;
++}
++.prose-blg :where(table) {
++  width: 100%;
++  border-collapse: collapse;
++  font-size: 0.95rem;
++}
++.prose-blg :where(th, td) {
++  border: 1px solid var(--border);
++  padding: 0.5rem 0.75rem;
++  text-align: left;
++}
++.prose-blg :where(iframe) {
++  max-width: 100%;
++  aspect-ratio: 16 / 9;
++  width: 100%;
++  border: 0;
++  border-radius: 0.75rem;
++}
++
+ /* Hide Android WebView's giant play overlay on muted autoplay videos */
+ .hero-bg-video {
+   object-fit: cover;
