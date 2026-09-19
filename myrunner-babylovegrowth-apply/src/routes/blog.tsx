@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageShell } from "@/components/site/page-shell";
-import { listBlgArticles } from "@/lib/babylovegrowth/articles.server";
+import { listArticlesFromStore } from "@/lib/babylovegrowth/articles";
 
 export const Route = createFileRoute("/blog")({
   loader: async () => {
-    const articles = await listBlgArticles();
+    const articles = listArticlesFromStore();
     return { articles };
   },
   head: () => ({

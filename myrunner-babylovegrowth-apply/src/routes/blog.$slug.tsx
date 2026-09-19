@@ -1,6 +1,6 @@
 import { createFileRoute, Link, redirect, notFound } from "@tanstack/react-router";
 import { PageShell } from "@/components/site/page-shell";
-import { getBlgArticleBySlug } from "@/lib/babylovegrowth/articles.server";
+import { getArticleBySlugFromStore } from "@/lib/babylovegrowth/articles";
 import {
   articleUrl,
   rewriteJsonLdUrls,
@@ -9,7 +9,7 @@ import {
 
 export const Route = createFileRoute("/blog/$slug")({
   loader: async ({ params }) => {
-    const result = await getBlgArticleBySlug({ data: { slug: params.slug } });
+    const result = getArticleBySlugFromStore(params.slug);
     if (!result.article) throw notFound();
     if (result.redirectFrom && result.article.slug !== params.slug) {
       throw redirect({

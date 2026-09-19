@@ -457,16 +457,19 @@ index 0000000..da18f78
 +  "list_complete": false,
 +  "last_run_at": "2026-09-19T18:33:20.290Z"
 +}
-diff --git a/src/lib/babylovegrowth/articles.server.ts b/src/lib/babylovegrowth/articles.server.ts
+diff --git a/src/lib/babylovegrowth/articles.ts b/src/lib/babylovegrowth/articles.ts
 new file mode 100644
-index 0000000..aee41fa
+index 0000000..2027241
 --- /dev/null
-+++ b/src/lib/babylovegrowth/articles.server.ts
-@@ -0,0 +1,58 @@
-+import { createServerFn } from "@tanstack/react-start";
++++ b/src/lib/babylovegrowth/articles.ts
+@@ -0,0 +1,48 @@
 +import type { BlgArticle, BlgArticleStore, BlgArticleSummary } from "./types";
 +import store from "@/content/babylovegrowth/articles.json";
 +
++/**
++ * Read synced BabyLoveGrowth articles from local JSON storage.
++ * No network calls — safe for SSR loaders without createServerFn/auth middleware.
++ */
 +function getStore(): BlgArticleStore {
 +  const data = store as BlgArticleStore;
 +  return {
@@ -508,19 +511,6 @@ index 0000000..aee41fa
 +  if (prev) return { article: prev, redirectFrom: slug };
 +  return { article: null };
 +}
-+
-+export const listBlgArticles = createServerFn({ method: "GET" }).handler(async () => {
-+  return listArticlesFromStore();
-+});
-+
-+export const getBlgArticleBySlug = createServerFn({ method: "GET" })
-+  .inputValidator((d: unknown) => {
-+    if (!d || typeof d !== "object" || typeof (d as { slug?: unknown }).slug !== "string") {
-+      throw new Error("slug required");
-+    }
-+    return { slug: (d as { slug: string }).slug };
-+  })
-+  .handler(async ({ data }) => getArticleBySlugFromStore(data.slug));
 diff --git a/src/lib/babylovegrowth/jsonld.ts b/src/lib/babylovegrowth/jsonld.ts
 new file mode 100644
 index 0000000..f83c762
@@ -918,13 +908,13 @@ index 1939071..4fba29b 100644
    CookiesRoute: CookiesRoute,
 diff --git a/src/routes/blog.$slug.tsx b/src/routes/blog.$slug.tsx
 new file mode 100644
-index 0000000..3bea9d7
+index 0000000..454aa09
 --- /dev/null
 +++ b/src/routes/blog.$slug.tsx
 @@ -0,0 +1,105 @@
 +import { createFileRoute, Link, redirect, notFound } from "@tanstack/react-router";
 +import { PageShell } from "@/components/site/page-shell";
-+import { getBlgArticleBySlug } from "@/lib/babylovegrowth/articles.server";
++import { getArticleBySlugFromStore } from "@/lib/babylovegrowth/articles";
 +import {
 +  articleUrl,
 +  rewriteJsonLdUrls,
@@ -933,7 +923,7 @@ index 0000000..3bea9d7
 +
 +export const Route = createFileRoute("/blog/$slug")({
 +  loader: async ({ params }) => {
-+    const result = await getBlgArticleBySlug({ data: { slug: params.slug } });
++    const result = getArticleBySlugFromStore(params.slug);
 +    if (!result.article) throw notFound();
 +    if (result.redirectFrom && result.article.slug !== params.slug) {
 +      throw redirect({
@@ -1029,17 +1019,17 @@ index 0000000..3bea9d7
 +}
 diff --git a/src/routes/blog.tsx b/src/routes/blog.tsx
 new file mode 100644
-index 0000000..6c6e2c1
+index 0000000..7f13668
 --- /dev/null
 +++ b/src/routes/blog.tsx
 @@ -0,0 +1,118 @@
 +import { createFileRoute, Link } from "@tanstack/react-router";
 +import { PageShell } from "@/components/site/page-shell";
-+import { listBlgArticles } from "@/lib/babylovegrowth/articles.server";
++import { listArticlesFromStore } from "@/lib/babylovegrowth/articles";
 +
 +export const Route = createFileRoute("/blog")({
 +  loader: async () => {
-+    const articles = await listBlgArticles();
++    const articles = listArticlesFromStore();
 +    return { articles };
 +  },
 +  head: () => ({
@@ -1152,13 +1142,13 @@ index 0000000..6c6e2c1
 +  });
 +}
 diff --git a/src/routes/sitemap[.]xml.ts b/src/routes/sitemap[.]xml.ts
-index c6e8f7e..8c8a868 100644
+index c6e8f7e..8028335 100644
 --- a/src/routes/sitemap[.]xml.ts
 +++ b/src/routes/sitemap[.]xml.ts
 @@ -1,15 +1,18 @@
  import { createFileRoute } from "@tanstack/react-router";
  import type {} from "@tanstack/react-start";
-+import { listArticlesFromStore } from "@/lib/babylovegrowth/articles.server";
++import { listArticlesFromStore } from "@/lib/babylovegrowth/articles";
 +import { siteOrigin } from "@/lib/babylovegrowth/jsonld";
  
 -const BASE_URL = "";

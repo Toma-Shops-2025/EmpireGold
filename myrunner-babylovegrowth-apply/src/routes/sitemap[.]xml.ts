@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
-import { listArticlesFromStore } from "@/lib/babylovegrowth/articles.server";
+import { listArticlesFromStore } from "@/lib/babylovegrowth/articles";
 import { siteOrigin } from "@/lib/babylovegrowth/jsonld";
 
 const BASE_URL = siteOrigin();

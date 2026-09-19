@@ -1,7 +1,10 @@
-import { createServerFn } from "@tanstack/react-start";
 import type { BlgArticle, BlgArticleStore, BlgArticleSummary } from "./types";
 import store from "@/content/babylovegrowth/articles.json";
 
+/**
+ * Read synced BabyLoveGrowth articles from local JSON storage.
+ * No network calls — safe for SSR loaders without createServerFn/auth middleware.
+ */
 function getStore(): BlgArticleStore {
   const data = store as BlgArticleStore;
   return {
@@ -43,16 +46,3 @@ export function getArticleBySlugFromStore(slug: string): {
   if (prev) return { article: prev, redirectFrom: slug };
   return { article: null };
 }
-
-export const listBlgArticles = createServerFn({ method: "GET" }).handler(async () => {
-  return listArticlesFromStore();
-});
-
-export const getBlgArticleBySlug = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => {
-    if (!d || typeof d !== "object" || typeof (d as { slug?: unknown }).slug !== "string") {
-      throw new Error("slug required");
-    }
-    return { slug: (d as { slug: string }).slug };
-  })
-  .handler(async ({ data }) => getArticleBySlugFromStore(data.slug));
