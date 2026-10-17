@@ -6,7 +6,15 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https'
-  }
+  },
+  plugins: {
+    SystemBars: {
+      insetsHandling: 'disable',
+    },
+    Keyboard: {
+      resizeOnFullScreen: false,
+    },
+  },
 };
 
 export default config;
